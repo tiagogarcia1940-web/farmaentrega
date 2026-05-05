@@ -226,6 +226,11 @@ interface AppUser {
 
 const getPharmacyId = (user?: AppUser | null) => user?.pharmacyId || DEFAULT_PHARMACY_ID;
 
+const getInitialPharmacyId = (uid: string, role?: AppUser['role'], isAdmin = false) => {
+  if (isAdmin || role === 'client' || !role) return DEFAULT_PHARMACY_ID;
+  return `pharmacy_${uid}`;
+};
+
 const GOOGLE_LOGIN_ROLE_KEY = 'farmaentrega.googleLoginRole';
 
 const getStoredGoogleLoginRole = (): AppUser['role'] | undefined => {
@@ -4174,7 +4179,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         role: isAdminEmail ? 'admin' : (requestedRole || 'client'),
         photoURL: firebaseUser.photoURL || '',
         status: (requestedRole === 'motoboy' && !isAdminEmail) ? 'available' : undefined,
-        pharmacyId: DEFAULT_PHARMACY_ID
+        pharmacyId: getInitialPharmacyId(firebaseUser.uid, requestedRole, isAdminEmail)
       };
       await setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
       storeGoogleLoginRole();
@@ -4239,7 +4244,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               email: firebaseUser.email || '',
               role: isAdminEmail ? 'admin' : (requestedRole || 'client'),
               photoURL: firebaseUser.photoURL || '',
-              pharmacyId: DEFAULT_PHARMACY_ID
+              pharmacyId: getInitialPharmacyId(firebaseUser.uid, requestedRole, isAdminEmail)
             };
             setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
             setUser(newUser);
@@ -4343,7 +4348,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       role,
       photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${result.user.uid}`,
       status: role === 'motoboy' ? 'available' : undefined,
-      pharmacyId: DEFAULT_PHARMACY_ID
+      pharmacyId: getInitialPharmacyId(result.user.uid, role)
     };
     await setDoc(doc(db, 'users', result.user.uid), newUser, { merge: true });
   };
@@ -4381,7 +4386,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           role,
           photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${credential.user.uid}`,
           status: role === 'motoboy' ? 'available' : undefined,
-          pharmacyId: DEFAULT_PHARMACY_ID
+          pharmacyId: getInitialPharmacyId(credential.user.uid, role)
         };
         await setDoc(doc(db, 'users', credential.user.uid), newUser, { merge: true });
       }
