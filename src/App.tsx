@@ -171,7 +171,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 // --- Types ---
 
-type OrderStatus = 'pending' | 'approved' | 'ready' | 'in_transit' | 'delivered';
+type OrderStatus = 'pending' | 'approved' | 'ready' | 'in_transit' | 'delivered' | 'cancelled';
 type DeliveryType = 'normal' | 'urgente' | 'controlado';
 
 interface Order {
