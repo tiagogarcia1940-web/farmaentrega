@@ -175,6 +175,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 type OrderStatus = 'pending' | 'approved' | 'ready' | 'in_transit' | 'delivered' | 'cancelled';
 type DeliveryType = 'normal' | 'urgente' | 'controlado';
+const DEFAULT_PHARMACY_ID = 'farmaentrega-matriz';
 
 interface Order {
   id: string;
@@ -208,6 +209,7 @@ interface Order {
   };
   customerId?: string;
   cancellationReason?: string;
+  pharmacyId?: string;
 }
 
 interface AppUser {
@@ -219,7 +221,10 @@ interface AppUser {
   status?: 'available' | 'busy' | 'offline';
   phone?: string;
   address?: string;
+  pharmacyId?: string;
 }
+
+const getPharmacyId = (user?: AppUser | null) => user?.pharmacyId || DEFAULT_PHARMACY_ID;
 
 const GOOGLE_LOGIN_ROLE_KEY = 'farmaentrega.googleLoginRole';
 
@@ -261,6 +266,7 @@ interface Product {
   tags?: string[];
   requiresApproval?: boolean;
   stock?: number;
+  pharmacyId?: string;
 }
 
 interface Notification {
@@ -863,10 +869,12 @@ const PharmacistView = () => {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'orders'), where('pharmacyId', '==', getPharmacyId(user)));
     const path = 'orders';
     return onSnapshot(q, (snapshot) => {
-      setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      docs.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      setOrders(docs);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, path);
     });
@@ -886,6 +894,7 @@ const PharmacistView = () => {
         orderCode,
         status: 'pending',
         pharmacistId: user?.uid,
+        pharmacyId: getPharmacyId(user),
         customerLocation: { lat: mockLat, lng: mockLng },
         createdAt: serverTimestamp()
       });
@@ -1541,14 +1550,18 @@ const LogisticsView = () => {
   });
 
   useEffect(() => {
-    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    if (!user) return;
+    const pharmacyId = getPharmacyId(user);
+    const q = query(collection(db, 'orders'), where('pharmacyId', '==', pharmacyId));
     const unsubOrders = onSnapshot(q, (snapshot) => {
-      setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      docs.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      setOrders(docs);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'orders');
     });
 
-    const mq = query(collection(db, 'users'), where('role', '==', 'motoboy'));
+    const mq = query(collection(db, 'users'), where('role', '==', 'motoboy'), where('pharmacyId', '==', pharmacyId));
     const unsubMotoboys = onSnapshot(mq, (snapshot) => {
       setMotoboys(snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as AppUser)));
     }, (error) => {
@@ -1556,7 +1569,7 @@ const LogisticsView = () => {
     });
 
     return () => { unsubOrders(); unsubMotoboys(); };
-  }, []);
+  }, [user]);
 
   const assignMotoboy = async (orderId: string, motoboy: AppUser | null) => {
     const path = `orders/${orderId}`;
@@ -1623,7 +1636,8 @@ const LogisticsView = () => {
         email: newMotoboy.email,
         phone: newMotoboy.phone,
         role: 'motoboy',
-        status: 'available'
+        status: 'available',
+        pharmacyId: getPharmacyId(user)
       }, { merge: true });
       setIsAddingMotoboy(false);
       setNewMotoboy({ name: '', email: '', phone: '' });
@@ -2256,6 +2270,7 @@ const MotoboyView = () => {
     // Minhas ordens atribuídas
     const qMy = query(
       collection(db, 'orders'), 
+      where('pharmacyId', '==', getPharmacyId(user)),
       where('motoboyId', '==', user.uid), 
       where('status', 'in', ['approved', 'in_transit', 'delivered']),
       limit(50)
@@ -2271,6 +2286,7 @@ const MotoboyView = () => {
     // Ordens disponíveis para coleta
     const qAvailable = query(
       collection(db, 'orders'), 
+      where('pharmacyId', '==', getPharmacyId(user)),
       where('status', '==', 'approved'),
       where('motoboyId', '==', null)
     );
@@ -2983,9 +2999,11 @@ const ClientView = ({
   });
   
   useEffect(() => {
-    const q = query(collection(db, 'products'), orderBy('name', 'asc'));
+    const q = query(collection(db, 'products'), where('pharmacyId', '==', DEFAULT_PHARMACY_ID));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setFeaturedProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      docs.sort((a, b) => a.name.localeCompare(b.name));
+      setFeaturedProducts(docs);
     }, (error) => {
       console.error("Erro ao carregar produtos:", error);
     });
@@ -3753,6 +3771,7 @@ const CheckoutForm = ({ cart, total, onComplete, pixKey }: { cart: CartItem[], t
           paymentMethod: formData.paymentMethod,
           change: formData.change,
           status: 'pending',
+          pharmacyId: DEFAULT_PHARMACY_ID,
           deliveryType: formData.deliveryType,
           createdAt: now,
           updatedAt: now
@@ -4154,7 +4173,8 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         email: firebaseUser.email || '',
         role: isAdminEmail ? 'admin' : (requestedRole || 'client'),
         photoURL: firebaseUser.photoURL || '',
-        status: (requestedRole === 'motoboy' && !isAdminEmail) ? 'available' : undefined
+        status: (requestedRole === 'motoboy' && !isAdminEmail) ? 'available' : undefined,
+        pharmacyId: DEFAULT_PHARMACY_ID
       };
       await setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
       storeGoogleLoginRole();
@@ -4218,7 +4238,8 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               name: firebaseUser.displayName || 'Usuário',
               email: firebaseUser.email || '',
               role: isAdminEmail ? 'admin' : (requestedRole || 'client'),
-              photoURL: firebaseUser.photoURL || ''
+              photoURL: firebaseUser.photoURL || '',
+              pharmacyId: DEFAULT_PHARMACY_ID
             };
             setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
             setUser(newUser);
@@ -4321,7 +4342,8 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       email,
       role,
       photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${result.user.uid}`,
-      status: role === 'motoboy' ? 'available' : undefined
+      status: role === 'motoboy' ? 'available' : undefined,
+      pharmacyId: DEFAULT_PHARMACY_ID
     };
     await setDoc(doc(db, 'users', result.user.uid), newUser, { merge: true });
   };
@@ -4358,7 +4380,8 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           email: '',
           role,
           photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${credential.user.uid}`,
-          status: role === 'motoboy' ? 'available' : undefined
+          status: role === 'motoboy' ? 'available' : undefined,
+          pharmacyId: DEFAULT_PHARMACY_ID
         };
         await setDoc(doc(db, 'users', credential.user.uid), newUser, { merge: true });
       }
@@ -4601,7 +4624,7 @@ const Dashboard = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) =
   // Som global de novos pedidos (toca uma vez por novo pedido, independente da aba)
   useEffect(() => {
     if (portal !== 'farmacia') return;
-    const q = query(collection(db, 'orders'), where('status', '==', 'pending'));
+    const q = query(collection(db, 'orders'), where('pharmacyId', '==', getPharmacyId(user)), where('status', '==', 'pending'));
     const unsub = onSnapshot(q, (snap) => {
       if (prevOrdersCount.current !== null && snap.size > prevOrdersCount.current) {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
@@ -4610,7 +4633,7 @@ const Dashboard = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) =
       prevOrdersCount.current = snap.size;
     });
     return () => unsub();
-  }, [portal]);
+  }, [portal, user]);
 
   useEffect(() => {
     localStorage.setItem('farmaentrega_cart', JSON.stringify(cart));
@@ -5302,9 +5325,11 @@ const CatalogView = () => {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'products'), orderBy('name', 'asc'));
+    const q = query(collection(db, 'products'), where('pharmacyId', '==', getPharmacyId(user)));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      docs.sort((a, b) => a.name.localeCompare(b.name));
+      setProducts(docs);
     }, (error) => {
       console.error("Erro no catalogo", error);
     });
@@ -5340,7 +5365,8 @@ const CatalogView = () => {
     const dataToSave = {
       ...formData,
       tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-      originalPrice: formData.originalPrice || null
+      originalPrice: formData.originalPrice || null,
+      pharmacyId: getPharmacyId(user)
     };
 
     try {
@@ -5651,9 +5677,9 @@ const AuthConsumerWrapper = () => {
     if (user.role === 'client') {
       q = query(collection(db, 'orders'), where('customerId', '==', user.uid));
     } else if (user.role === 'motoboy') {
-      q = query(collection(db, 'orders'), where('motoboyId', '==', user.uid));
+      q = query(collection(db, 'orders'), where('pharmacyId', '==', getPharmacyId(user)), where('motoboyId', '==', user.uid));
     } else {
-      q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(50));
+      q = query(collection(db, 'orders'), where('pharmacyId', '==', getPharmacyId(user)), limit(50));
     }
 
     return onSnapshot(q, (snapshot) => {
