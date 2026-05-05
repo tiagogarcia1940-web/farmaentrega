@@ -14,6 +14,8 @@ import {
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider, 
   signOut,
   signInAnonymously,
@@ -218,6 +220,23 @@ interface AppUser {
   phone?: string;
   address?: string;
 }
+
+const GOOGLE_LOGIN_ROLE_KEY = 'farmaentrega.googleLoginRole';
+
+const getStoredGoogleLoginRole = (): AppUser['role'] | undefined => {
+  if (typeof window === 'undefined') return undefined;
+  const role = window.sessionStorage.getItem(GOOGLE_LOGIN_ROLE_KEY);
+  return role === 'admin' || role === 'pharmacist' || role === 'motoboy' || role === 'client' ? role : undefined;
+};
+
+const storeGoogleLoginRole = (role?: AppUser['role']) => {
+  if (typeof window === 'undefined') return;
+  if (role) {
+    window.sessionStorage.setItem(GOOGLE_LOGIN_ROLE_KEY, role);
+  } else {
+    window.sessionStorage.removeItem(GOOGLE_LOGIN_ROLE_KEY);
+  }
+};
 
 interface CartItem {
   id: string;
@@ -4124,13 +4143,62 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const completeGoogleSignIn = async (firebaseUser: FirebaseUser, requestedRole?: AppUser['role']) => {
+    const isAdminEmail = firebaseUser.email === 'xtiaguinhox65@gmail.com';
+    const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+    
+    if (!userDoc.exists()) {
+      const newUser: AppUser = {
+        uid: firebaseUser.uid,
+        name: firebaseUser.displayName || 'Usuário',
+        email: firebaseUser.email || '',
+        role: isAdminEmail ? 'admin' : (requestedRole || 'client'),
+        photoURL: firebaseUser.photoURL || '',
+        status: (requestedRole === 'motoboy' && !isAdminEmail) ? 'available' : undefined
+      };
+      await setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
+      storeGoogleLoginRole();
+      return;
+    }
+
+    const existingUser = userDoc.data() as AppUser;
+    
+    if (isAdminEmail) {
+      if (existingUser.role !== 'admin') {
+        await updateDoc(doc(db, 'users', firebaseUser.uid), { role: 'admin' });
+      }
+      storeGoogleLoginRole();
+      return;
+    }
+
+    if (requestedRole && existingUser.role !== requestedRole) {
+      await signOut(auth);
+      storeGoogleLoginRole();
+      throw new Error(`Este e-mail já está cadastrado como ${existingUser.role}. Por favor, entre no setor correto.`);
+    }
+
+    storeGoogleLoginRole();
+  };
+
   useEffect(() => {
     let unsubUser: (() => void) | undefined;
+
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user) {
+          await completeGoogleSignIn(result.user, getStoredGoogleLoginRole());
+        }
+      })
+      .catch((error) => {
+        console.error('Erro ao finalizar login com Google:', error);
+        storeGoogleLoginRole();
+      });
 
     const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         // Check if it's the admin email
         const isAdminEmail = firebaseUser.email === 'xtiaguinhox65@gmail.com';
+        const requestedRole = getStoredGoogleLoginRole();
         
         unsubUser = onSnapshot(doc(db, 'users', firebaseUser.uid), (docSnap) => {
           if (docSnap.exists()) {
@@ -4149,7 +4217,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               uid: firebaseUser.uid,
               name: firebaseUser.displayName || 'Usuário',
               email: firebaseUser.email || '',
-              role: isAdminEmail ? 'admin' : 'client',
+              role: isAdminEmail ? 'admin' : (requestedRole || 'client'),
               photoURL: firebaseUser.photoURL || ''
             };
             setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
@@ -4178,6 +4246,23 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (requestedRole?: AppUser['role']) => {
     const provider = new GoogleAuthProvider();
+    storeGoogleLoginRole(requestedRole);
+
+    try {
+      const result = await signInWithPopup(auth, provider);
+      if (result.user) {
+        await completeGoogleSignIn(result.user, requestedRole);
+      }
+    } catch (error: any) {
+      if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/popup-closed-by-user') {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+      storeGoogleLoginRole();
+      throw error;
+    }
+    return;
+
     const result = await signInWithPopup(auth, provider);
     
     if (result.user) {
