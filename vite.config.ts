@@ -12,7 +12,7 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+        includeAssets: ['pwa-192x192.png', 'pwa-512x512.png', 'apple-touch-icon.png'],
         manifest: {
           name: 'FarmaEntrega',
           short_name: 'FarmaEntrega',
@@ -24,23 +24,16 @@ export default defineConfig(({mode}) => {
           start_url: '/',
           icons: [
             {
-              src: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect fill="%232E75B6" width="192" height="192"/><text x="50%" y="50%" font-size="80" fill="white" text-anchor="middle" dominant-baseline="central" font-weight="bold">FE</text></svg>',
+              src: '/pwa-192x192.png',
               sizes: '192x192',
-              type: 'image/svg+xml',
+              type: 'image/png',
               purpose: 'any'
             },
             {
-              src: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect fill="%232E75B6" width="512" height="512"/><text x="50%" y="50%" font-size="200" fill="white" text-anchor="middle" dominant-baseline="central" font-weight="bold">FE</text></svg>',
+              src: '/pwa-512x512.png',
               sizes: '512x512',
-              type: 'image/svg+xml',
+              type: 'image/png',
               purpose: 'any maskable'
-            }
-          ],
-          screenshots: [
-            {
-              src: 'screenshot-1.png',
-              sizes: '540x720',
-              type: 'image/png'
             }
           ],
           categories: ['business', 'shopping'],
