@@ -1,0 +1,6 @@
+{
+  "name": "FarmaEntrega",
+  "description": "Sistema de logística e entrega para farmácias com rastreamento em tempo real para motoboys e clientes.",
+  "requestFramePermissions": ["geolocation", "camera"],
+  "majorCapabilities": []
+}

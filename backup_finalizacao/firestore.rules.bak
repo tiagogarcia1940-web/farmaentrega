@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "xtiaguinhox65@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
+    function isStaff() {
+      return isAdmin() || hasRole('pharmacist') || hasRole('logistics');
+    }
+
+    match /users/{userId} {
+      // Cada usuário lê seu próprio perfil, ou staff lê todos para gestão
+      allow read: if isSignedIn() && (request.auth.uid == userId || isStaff());
+      // Usuários comuns podem criar seu perfil, mas não podem mudar o próprio role após a criação
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      // Clientes veem seus pedidos, motoboys veem os atribuídos, staff vê tudo
+      allow read: if isSignedIn() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.customerPhone == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.phone ||
+        resource.data.motoboyId == request.auth.uid ||
+        isStaff()
+      );
+      
+      // Permitir criação se estiver logado e o customerId bater com o UID (ou for admin/staff)
+      allow create: if isSignedIn() && (request.resource.data.customerId == request.auth.uid || isAdmin() || hasRole('pharmacist'));
+      
+      // Regras de atualização granulares
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (hasRole('pharmacist') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'motoboyId', 'motoboyName', 'items', 'totalValue', 'change', 'approvedAt', 'updatedAt'])) ||
+        (hasRole('logistics') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['motoboyId', 'motoboyName', 'status', 'updatedAt'])) ||
+        (resource.data.motoboyId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'inTransitAt', 'deliveredAt', 'updatedAt', 'location', 'deliveryLocation', 'deliveryProof']))
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+
+    match /counters/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isStaff() || isAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isStaff() || isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

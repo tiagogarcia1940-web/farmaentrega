@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user with specific roles",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["pharmacist", "logistics", "motoboy", "client"] },
+        "photoURL": { "type": "string" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Pharmacy order to be delivered",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerAddress": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "items": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "in_transit", "delivered"] },
+        "pharmacistId": { "type": "string" },
+        "logisticsId": { "type": "string" },
+        "motoboyId": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerName", "customerAddress", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Delivery orders"
+    }
+  }
+}

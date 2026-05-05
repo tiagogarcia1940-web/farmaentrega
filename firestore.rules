@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "xtiaguinhox65@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
+    function isStaff() {
+      return isAdmin() || hasRole('pharmacist') || hasRole('logistics');
+    }
+
+    match /users/{userId} {
+      // Cada usuário lê seu próprio perfil (sempre), ou admin/staff podem ler todos
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      // Usuários comuns podem criar seu perfil, mas não podem mudar o próprio role após a criação
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      // Clientes veem seus pedidos, motoboys veem os atribuídos, staff vê tudo
+      allow read: if isSignedIn() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.customerPhone == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.phone ||
+        resource.data.motoboyId == request.auth.uid ||
+        isStaff()
+      );
+      
+      // Permitir criação se estiver logado e o customerId bater com o UID (ou for admin/staff)
+      // Todo pedido deve obrigatoriamente começar como 'pending'
+      allow create: if isSignedIn() && 
+                    (request.resource.data.customerId == request.auth.uid || isAdmin() || hasRole('pharmacist')) &&
+                    request.resource.data.status == 'pending';
+      
+      // Regras de atualização granulares
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (hasRole('pharmacist') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'motoboyId', 'motoboyName', 'items', 'totalValue', 'change', 'approvedAt', 'updatedAt'])) ||
+        (hasRole('logistics') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['motoboyId', 'motoboyName', 'status', 'updatedAt'])) ||
+        (resource.data.motoboyId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'inTransitAt', 'deliveredAt', 'updatedAt', 'location', 'deliveryLocation', 'deliveryProof']))
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+
+    match /counters/{docId} {
+      allow read: if isSignedIn();
+      // Permite criar ou atualizar o contador de pedidos
+      allow create, update: if isSignedIn() && 
+                    (resource == null || request.resource.data.lastNumber >= resource.data.lastNumber);
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isStaff() || isAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isStaff() || isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
