@@ -429,23 +429,22 @@ const AppUpdateNotice = () => {
       window.location.replace(url.toString());
     };
 
-    navigator.serviceWorker?.addEventListener('controllerchange', reload, { once: true });
-    window.setTimeout(reload, 1500);
+    window.setTimeout(reload, 2000);
 
-    navigator.serviceWorker?.getRegistrations?.()
-      .then(registrations => {
-        registrations.forEach(registration => {
-          registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
-        });
-      })
-      .catch(error => {
-        console.error('Erro ao ativar service worker:', error);
-      });
-
-    updateServiceWorker(true).catch(error => {
-      console.error('Erro ao atualizar service worker:', error);
-      reload();
-    });
+    Promise.all([
+      caches?.keys?.()
+        .then(keys => Promise.all(keys.map(key => caches.delete(key))))
+        .catch(error => {
+          console.error('Erro ao limpar cache do PWA:', error);
+        }),
+      navigator.serviceWorker?.getRegistrations?.()
+        .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+        .catch(error => {
+          console.error('Erro ao remover service worker antigo:', error);
+        })
+    ])
+      .then(() => updateServiceWorker(true).catch(() => undefined))
+      .finally(reload);
   };
 
   return (
