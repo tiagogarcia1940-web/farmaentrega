@@ -417,19 +417,35 @@ const AppUpdateNotice = () => {
 
   if (!needRefresh && !offlineReady) return null;
 
-  const handleApplyUpdate = async () => {
+  const handleApplyUpdate = () => {
     setIsUpdating(true);
     let reloaded = false;
 
     const reload = () => {
       if (reloaded) return;
       reloaded = true;
-      window.location.reload();
+      const url = new URL(window.location.href);
+      url.searchParams.set('appUpdate', Date.now().toString());
+      window.location.replace(url.toString());
     };
 
     navigator.serviceWorker?.addEventListener('controllerchange', reload, { once: true });
-    await updateServiceWorker(true);
     window.setTimeout(reload, 1500);
+
+    navigator.serviceWorker?.getRegistrations?.()
+      .then(registrations => {
+        registrations.forEach(registration => {
+          registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
+        });
+      })
+      .catch(error => {
+        console.error('Erro ao ativar service worker:', error);
+      });
+
+    updateServiceWorker(true).catch(error => {
+      console.error('Erro ao atualizar service worker:', error);
+      reload();
+    });
   };
 
   return (
