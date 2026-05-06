@@ -55,6 +55,17 @@ service cloud.firestore {
         (
           request.auth.uid == userId &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'pharmacyId'])
+        ) ||
+        (
+          request.auth.uid == userId &&
+          request.resource.data.role == 'motoboy' &&
+          request.resource.data.motoboyInviteToken is string &&
+          exists(/databases/$(database)/documents/motoboyInvites/$(request.resource.data.motoboyInviteToken)) &&
+          get(/databases/$(database)/documents/motoboyInvites/$(request.resource.data.motoboyInviteToken)).data.status == 'active' &&
+          get(/databases/$(database)/documents/motoboyInvites/$(request.resource.data.motoboyInviteToken)).data.pharmacyId == request.resource.data.pharmacyId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'role', 'pharmacyId', 'status', 'motoboyInviteToken', 'updatedAt'
+          ])
         )
       );
 
@@ -142,6 +153,21 @@ service cloud.firestore {
         resource.data.pharmacyId == pharmacyId &&
         request.resource.data.pharmacyId == pharmacyId &&
         pharmacyId == userPharmacyId()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /motoboyInvites/{inviteId} {
+      allow read: if isSignedIn();
+      allow create: if isStaff() &&
+        request.resource.data.pharmacyId == userPharmacyId() &&
+        request.resource.data.status == 'active';
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        (
+          (isStaff() && resource.data.pharmacyId == userPharmacyId()) ||
+          request.resource.data.lastLinkedUserId == request.auth.uid
+        )
       );
       allow delete: if isAdmin();
     }

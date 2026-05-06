@@ -24,9 +24,6 @@ import {
   sendPasswordResetEmail,
   updatePassword,
   updateProfile,
-  signInWithPhoneNumber,
-  RecaptchaVerifier,
-  ConfirmationResult,
   User as FirebaseUser
 } from 'firebase/auth';
 import { 
@@ -342,8 +339,6 @@ interface AuthContextType {
   signInWithEmail: (email: string, pass: string, role?: AppUser['role']) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string, role: AppUser['role'], pharmacyData?: PharmacySignupData) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  signInWithPhone: (phone: string, containerId: string) => Promise<ConfirmationResult>;
-  confirmPhoneCode: (result: ConfirmationResult, code: string, role: AppUser['role']) => Promise<void>;
   updateUserProfile: (data: { name?: string, photoURL?: string }) => Promise<void>;
   updateUserPassword: (pass: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -872,11 +867,69 @@ const LoadingScreen = () => (
 
 const PortalLayout = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
+  const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const params = new URLSearchParams(location.search);
+    const inviteToken = params.get('motoboyInvite');
+    if (!inviteToken) return;
+
+    let cancelled = false;
+    const applyInvite = async () => {
+      setInviteStatus('Vinculando motoboy a farmacia...');
+      try {
+        const inviteSnap = await getDoc(doc(db, 'motoboyInvites', inviteToken));
+        if (!inviteSnap.exists()) throw new Error('Convite nao encontrado.');
+        const invite = inviteSnap.data() as { pharmacyId?: string; status?: string };
+        if (!invite.pharmacyId || invite.status === 'revoked') throw new Error('Convite invalido.');
+
+        await updateDoc(doc(db, 'users', user.uid), {
+          role: 'motoboy',
+          pharmacyId: invite.pharmacyId,
+          status: 'available',
+          motoboyInviteToken: inviteToken,
+          updatedAt: serverTimestamp()
+        });
+
+        await setDoc(doc(db, 'motoboyInvites', inviteToken), {
+          lastLinkedUserId: user.uid,
+          lastLinkedAt: serverTimestamp()
+        }, { merge: true });
+
+        if (!cancelled) {
+          setInviteStatus('Motoboy vinculado com sucesso. Redirecionando...');
+          window.setTimeout(() => window.location.replace('/motoboy'), 800);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) setInviteStatus('Nao foi possivel vincular este convite. Peça um novo QR Code para a farmacia.');
+      }
+    };
+
+    applyInvite();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, location.search]);
   
   if (loading) return <LoadingScreen />;
 
   if (!user) {
     return <Login portal={portal} />;
+  }
+
+  if (inviteStatus) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+        <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-md text-center space-y-4 border border-indigo-100">
+          <Bike size={42} className="mx-auto text-indigo-600" />
+          <h2 className="text-2xl font-black text-gray-900">Vinculo do Motoboy</h2>
+          <p className="text-sm font-bold text-gray-500">{inviteStatus}</p>
+        </div>
+      </div>
+    );
   }
 
   const role = user.role;
@@ -1662,6 +1715,7 @@ const LogisticsView = () => {
   const [filterStartDate, setFilterStartDate] = useState<string>('');
   const [filterEndDate, setFilterEndDate] = useState<string>('');
   const [selectedOrderQR, setSelectedOrderQR] = useState<Order | null>(null);
+  const [motoboyInviteUrl, setMotoboyInviteUrl] = useState<string | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [editData, setEditData] = useState({ 
     items: '', 
@@ -1744,6 +1798,24 @@ const LogisticsView = () => {
     ? [user, ...motoboys.filter(m => m.uid !== user.uid)]
     : motoboys;
 
+  const createMotoboyInvite = async () => {
+    if (!user) return;
+    const token = `${getPharmacyId(user)}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const path = `motoboyInvites/${token}`;
+    try {
+      await setDoc(doc(db, 'motoboyInvites', token), {
+        token,
+        pharmacyId: getPharmacyId(user),
+        createdBy: user.uid,
+        status: 'active',
+        createdAt: serverTimestamp()
+      });
+      setMotoboyInviteUrl(`${window.location.origin}/motoboy?motoboyInvite=${encodeURIComponent(token)}`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  };
+
   const handleRegisterMotoboy = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValidEmail(newMotoboy.email)) {
@@ -1821,6 +1893,12 @@ const LogisticsView = () => {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <button
+            onClick={createMotoboyInvite}
+            className="bg-white text-indigo-600 px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-50 transition-all border border-indigo-100 font-bold text-xs"
+          >
+            <QrCode size={16} /> QR Motoboy
+          </button>
           <button 
             onClick={() => setIsAddingMotoboy(true)}
             className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 font-bold text-xs"
@@ -1913,6 +1991,49 @@ const LogisticsView = () => {
           Limpar
         </button>
       </div>
+
+      <AnimatePresence>
+        {motoboyInviteUrl && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center space-y-6"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-xl font-bold text-gray-900">QR de Vinculo do Motoboy</h3>
+                <button onClick={() => setMotoboyInviteUrl(null)} className="text-gray-400 hover:text-gray-600">
+                  <Plus className="rotate-45" size={24} />
+                </button>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border-2 border-dashed border-gray-200 inline-block">
+                <QRCodeCanvas
+                  value={motoboyInviteUrl}
+                  size={220}
+                  level="H"
+                  includeMargin={true}
+                />
+              </div>
+
+              <p className="text-sm font-bold text-gray-500">
+                O motoboy deve abrir este QR, entrar com Google ou e-mail e será vinculado automaticamente a esta farmácia.
+              </p>
+
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(motoboyInviteUrl);
+                  alert('Link do motoboy copiado.');
+                }}
+                className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors"
+              >
+                Copiar Link
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {isAddingMotoboy && (
@@ -4297,8 +4418,6 @@ const ClientTrackingDetails = ({ order: initialOrder }: { order: Order }) => {
 };
 
 // --- Main App ---
-let globalRecaptchaVerifier: any = null;
-
 const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -4505,42 +4624,6 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await sendPasswordResetEmail(auth, email);
   };
 
-  const signInWithPhone = async (phone: string, containerId: string) => {
-    if (globalRecaptchaVerifier) {
-      try {
-        globalRecaptchaVerifier.clear();
-      } catch (e) {
-        console.warn("Erro ao limpar recaptcha:", e);
-      }
-      globalRecaptchaVerifier = null;
-    }
-
-    const container = document.getElementById(containerId);
-    if (container) container.innerHTML = '';
-
-    globalRecaptchaVerifier = new RecaptchaVerifier(auth, containerId, { size: 'invisible' });
-    return await signInWithPhoneNumber(auth, phone, globalRecaptchaVerifier);
-  };
-
-  const confirmPhoneCode = async (result: ConfirmationResult, code: string, role: AppUser['role']) => {
-    const credential = await result.confirm(code);
-    if (credential.user) {
-      const userDoc = await getDoc(doc(db, 'users', credential.user.uid));
-      if (!userDoc.exists()) {
-        const newUser: AppUser = {
-          uid: credential.user.uid,
-          name: 'Usuário SMS',
-          email: '',
-          role,
-          photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${credential.user.uid}`,
-          status: role === 'motoboy' ? 'available' : undefined,
-          pharmacyId: getInitialPharmacyId(credential.user.uid, role)
-        };
-        await setDoc(doc(db, 'users', credential.user.uid), newUser, { merge: true });
-      }
-    }
-  };
-
   const updateUserProfile = async (data: { name?: string, photoURL?: string }) => {
     if (!auth.currentUser) return;
     await updateProfile(auth.currentUser, {
@@ -4565,7 +4648,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <AuthContext.Provider value={{ 
       user, loading, signIn, signInWithEmail, signUpWithEmail, 
-      resetPassword, signInWithPhone, confirmPhoneCode, 
+      resetPassword,
       updateUserProfile, updateUserPassword, logout 
     }}>
       {children}
@@ -5110,10 +5193,10 @@ const Dashboard = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) =
 };
 
 const Login = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) => {
-  const { signIn, signInWithEmail, signUpWithEmail, resetPassword, signInWithPhone, confirmPhoneCode } = useAuth();
+  const { signIn, signInWithEmail, signUpWithEmail, resetPassword } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
-  const [loginMethod, setLoginMethod] = useState<'google' | 'email' | 'phone'>('google');
+  const [loginMethod, setLoginMethod] = useState<'google' | 'email'>('google');
   const [emailMode, setEmailMode] = useState<'signin' | 'signup' | 'reset'>('signin');
   const [selectedRole, setSelectedRole] = useState<AppUser['role']>(
     portal === 'motoboy' ? 'motoboy' : portal === 'cliente' ? 'client' : 'pharmacist'
@@ -5128,9 +5211,6 @@ const Login = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) => {
     openingHours: 'Segunda a sabado, 08:00 as 20:00'
   });
   
-  const [phone, setPhone] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
-  const [confirmationResult, setConfirmationResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
   const portalConfig = {
@@ -5206,50 +5286,8 @@ const Login = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) => {
     }
   };
 
-  const handlePhoneSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    
-    // Formatação inteligente: remove caracteres especiais e garante o +55
-    let cleanPhone = phone.replace(/\D/g, ''); // Mantém só números
-    if (!phone.startsWith('+')) {
-      if (cleanPhone.length >= 10 && !cleanPhone.startsWith('55')) {
-        cleanPhone = '+55' + cleanPhone;
-      } else {
-        cleanPhone = '+' + cleanPhone;
-      }
-    } else {
-      cleanPhone = '+' + cleanPhone;
-    }
-
-    try {
-      const result = await signInWithPhone(cleanPhone, 'recaptcha-container');
-      setConfirmationResult(result);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleConfirmCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    try {
-      await confirmPhoneCode(confirmationResult, verificationCode, selectedRole);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div id="recaptcha-container"></div>
-      
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -5272,7 +5310,7 @@ const Login = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) => {
 
         {/* Login Method Tabs */}
         <div className="flex bg-gray-100 p-1.5 rounded-2xl max-w-sm mx-auto">
-          {['google', 'email', 'phone'].map((method) => (
+          {(['google', 'email'] as const).map((method) => (
             <button 
               key={method}
               onClick={() => setLoginMethod(method as any)}
@@ -5281,7 +5319,7 @@ const Login = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) => {
                 loginMethod === method ? "bg-white shadow-sm text-indigo-600" : "text-gray-400 hover:bg-white/50"
               )}
             >
-              {method === 'google' ? 'Google' : method === 'email' ? 'E-mail' : 'SMS'}
+              {method === 'google' ? 'Google' : 'E-mail'}
             </button>
           ))}
         </div>
@@ -5426,65 +5464,6 @@ const Login = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) => {
               )}
             </div>
           </form>
-        )}
-
-        {loginMethod === 'phone' && (
-          <div className="space-y-4 text-left">
-            {!confirmationResult ? (
-              <form onSubmit={handlePhoneSignIn} className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">WhatsApp / Celular</label>
-                  <div className="relative mt-1">
-                    <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                    <input 
-                      type="tel" 
-                      className="w-full p-4 pl-12 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium"
-                      value={phone}
-                      onChange={e => setPhone(e.target.value)}
-                      placeholder="+55 (11) 99999-9999"
-                      required
-                    />
-                  </div>
-                </div>
-                <button 
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-emerald-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-700 transition-all disabled:opacity-50"
-                >
-                  Solicitar Código SMS
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleConfirmCode} className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">Código de Verificação</label>
-                  <input 
-                    type="text" 
-                    className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl mt-1 focus:ring-2 focus:ring-indigo-500 outline-none text-center text-3xl tracking-[1em] font-black"
-                    value={verificationCode}
-                    onChange={e => setVerificationCode(e.target.value)}
-                    placeholder="000000"
-                    maxLength={6}
-                    required
-                  />
-                </div>
-                <button 
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
-                >
-                  Validar e Entrar
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setConfirmationResult(null)}
-                  className="w-full text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-600 text-center"
-                >
-                  Tentar outro número
-                </button>
-              </form>
-            )}
-          </div>
         )}
 
         <div className="pt-4 border-t border-gray-50">
