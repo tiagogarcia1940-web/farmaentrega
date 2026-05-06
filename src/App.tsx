@@ -393,13 +393,14 @@ const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
 };
 
 const AppUpdateNotice = () => {
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [showUpdatedNotice, setShowUpdatedNotice] = useState(false);
   const {
-    needRefresh: [needRefresh, setNeedRefresh],
-    offlineReady: [offlineReady, setOfflineReady],
-    updateServiceWorker
+    offlineReady: [offlineReady, setOfflineReady]
   } = useRegisterSW({
     immediate: true,
+    onNeedReload() {
+      window.location.reload();
+    },
     onRegisteredSW(_swScriptUrl, registration) {
       if (!registration) return;
       const interval = window.setInterval(() => {
@@ -415,71 +416,41 @@ const AppUpdateNotice = () => {
     }
   });
 
-  if (!needRefresh && !offlineReady) return null;
+  useEffect(() => {
+    const storageKey = 'farmaentrega.appVersion';
+    const previousVersion = window.localStorage.getItem(storageKey);
+    window.localStorage.setItem(storageKey, __APP_VERSION__);
 
-  const handleApplyUpdate = () => {
-    setIsUpdating(true);
-    let reloaded = false;
+    if (previousVersion && previousVersion !== __APP_VERSION__) {
+      setShowUpdatedNotice(true);
+    }
+  }, []);
 
-    const reload = () => {
-      if (reloaded) return;
-      reloaded = true;
-      const url = new URL(window.location.href);
-      url.searchParams.set('appUpdate', Date.now().toString());
-      window.location.replace(url.toString());
-    };
-
-    window.setTimeout(reload, 2000);
-
-    Promise.all([
-      caches?.keys?.()
-        .then(keys => Promise.all(keys.map(key => caches.delete(key))))
-        .catch(error => {
-          console.error('Erro ao limpar cache do PWA:', error);
-        }),
-      navigator.serviceWorker?.getRegistrations?.()
-        .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
-        .catch(error => {
-          console.error('Erro ao remover service worker antigo:', error);
-        })
-    ])
-      .then(() => updateServiceWorker(true).catch(() => undefined))
-      .finally(reload);
-  };
+  if (!showUpdatedNotice && !offlineReady) return null;
 
   return (
     <div className="fixed inset-x-4 bottom-4 z-[9999] mx-auto max-w-xl rounded-2xl border border-indigo-100 bg-white p-4 shadow-2xl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-black text-gray-900">
-            {needRefresh ? 'Nova atualização disponível' : 'Aplicativo pronto para usar offline'}
+            {showUpdatedNotice ? 'Aplicativo atualizado' : 'Aplicativo pronto para usar offline'}
           </p>
           <p className="text-xs font-medium text-gray-500">
-            {needRefresh
-              ? 'Atualize para carregar a versão mais recente do FarmaEntrega.'
+            {showUpdatedNotice
+              ? 'A versão mais recente do FarmaEntrega já está carregada.'
               : 'Os arquivos principais foram salvos neste dispositivo.'}
           </p>
         </div>
         <div className="flex gap-2">
-          {needRefresh && (
-            <button
-              type="button"
-              onClick={handleApplyUpdate}
-              disabled={isUpdating}
-              className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white disabled:opacity-60"
-            >
-              {isUpdating ? 'Atualizando...' : 'Atualizar'}
-            </button>
-          )}
           <button
             type="button"
             onClick={() => {
-              setNeedRefresh(false);
+              setShowUpdatedNotice(false);
               setOfflineReady(false);
             }}
             className="rounded-xl bg-gray-100 px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-500"
           >
-            Depois
+            OK
           </button>
         </div>
       </div>

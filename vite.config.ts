@@ -6,12 +6,13 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
+  const appVersion = new Date().toISOString();
   return {
     plugins: [
       react(),
       tailwindcss(),
       VitePWA({
-        registerType: 'prompt',
+        registerType: 'autoUpdate',
         includeAssets: ['pwa-192x192.png', 'pwa-512x512.png', 'apple-touch-icon.png'],
         manifest: {
           name: 'FarmaEntrega',
@@ -40,6 +41,8 @@ export default defineConfig(({mode}) => {
           screenshots: []
         },
         workbox: {
+          skipWaiting: true,
+          clientsClaim: true,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,jpeg,jpg,gif,webp,woff,woff2,eot,ttf,otf}'],
           runtimeCaching: [
             {
@@ -76,6 +79,7 @@ export default defineConfig(({mode}) => {
     ],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      __APP_VERSION__: JSON.stringify(appVersion),
     },
     resolve: {
       alias: {
