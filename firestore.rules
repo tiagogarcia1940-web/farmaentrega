@@ -93,7 +93,7 @@ service cloud.firestore {
           hasRole('pharmacist') &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'status', 'motoboyId', 'motoboyName', 'items', 'totalValue', 'change',
-            'customerName', 'customerAddress', 'customerPhone', 'deliveryType',
+            'customerName', 'customerAddress', 'customerPhone', 'deliveryType', 'paymentMethod',
             'approvedAt', 'readyAt', 'updatedAt', 'cancellationReason'
           ])
         ) ||

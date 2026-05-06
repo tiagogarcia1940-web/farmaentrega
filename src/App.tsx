@@ -180,7 +180,17 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 type OrderStatus = 'pending' | 'approved' | 'ready' | 'in_transit' | 'delivered' | 'cancelled';
 type DeliveryType = 'normal' | 'urgente' | 'controlado';
+type PaymentMethod = 'dinheiro' | 'cartao' | 'pix' | 'convenio';
 const DEFAULT_PHARMACY_ID = 'farmaentrega-matriz';
+
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  dinheiro: 'Dinheiro',
+  cartao: 'Cartao',
+  pix: 'PIX',
+  convenio: 'Convenio / deixar na conta'
+};
+
+const paymentMethods: PaymentMethod[] = ['pix', 'cartao', 'dinheiro', 'convenio'];
 
 interface Order {
   id: string;
@@ -190,7 +200,7 @@ interface Order {
   customerPhone: string;
   items: string;
   change?: number;
-  paymentMethod?: 'dinheiro' | 'cartao' | 'pix';
+  paymentMethod?: PaymentMethod;
   totalValue?: number;
   status: OrderStatus;
   deliveryType?: DeliveryType;
@@ -970,7 +980,7 @@ const PharmacistView = () => {
     customerAddress: '',
     customerPhone: '',
     items: '',
-    paymentMethod: 'dinheiro' as 'dinheiro' | 'cartao' | 'pix',
+    paymentMethod: 'dinheiro' as PaymentMethod,
     deliveryType: 'normal' as DeliveryType,
     totalValue: 0,
     change: 0
@@ -1008,7 +1018,7 @@ const PharmacistView = () => {
         createdAt: serverTimestamp()
       });
       setIsAdding(false);
-      setNewOrder({ customerName: '', customerAddress: '', customerPhone: '', items: '', paymentMethod: 'dinheiro', totalValue: 0 });
+      setNewOrder({ customerName: '', customerAddress: '', customerPhone: '', items: '', paymentMethod: 'dinheiro', deliveryType: 'normal', totalValue: 0, change: 0 });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
     }
@@ -1155,6 +1165,7 @@ const PharmacistView = () => {
             <option value="dinheiro">Dinheiro</option>
             <option value="cartao">Cartão</option>
             <option value="pix">PIX</option>
+            <option value="convenio">Convênio / deixar na conta</option>
           </select>
         </div>
         <div className="space-y-1">
@@ -1265,7 +1276,7 @@ const PharmacistView = () => {
               <div className="md:col-span-2 space-y-2">
                 <label className="text-sm font-medium text-gray-700">Forma de Pagamento</label>
                 <div className="flex gap-4">
-                  {(['dinheiro', 'cartao', 'pix'] as const).map((method) => (
+                  {paymentMethods.map((method) => (
                     <label key={method} className="flex items-center gap-2 cursor-pointer">
                       <input 
                         type="radio" 
@@ -1275,7 +1286,7 @@ const PharmacistView = () => {
                         onChange={() => setNewOrder({...newOrder, paymentMethod: method})}
                         className="text-indigo-600 focus:ring-indigo-500"
                       />
-                      <span className="text-sm capitalize">{method}</span>
+                      <span className="text-sm">{paymentMethodLabels[method]}</span>
                     </label>
                   ))}
                 </div>
@@ -1474,7 +1485,7 @@ const PharmacistView = () => {
                 </td>
                 <td className="px-6 py-4">
                   <span className="text-xs font-medium bg-gray-100 px-2 py-1 rounded capitalize">
-                    {order.paymentMethod || 'N/A'}
+                    {order.paymentMethod ? paymentMethodLabels[order.paymentMethod] : 'N/A'}
                   </span>
                 </td>
                 <td className="px-6 py-4">
@@ -1863,6 +1874,7 @@ const LogisticsView = () => {
               <option value="dinheiro">Dinheiro</option>
               <option value="cartao">Cartão</option>
               <option value="pix">PIX</option>
+              <option value="convenio">Convênio</option>
             </select>
             <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           </div>
@@ -2009,7 +2021,7 @@ const LogisticsView = () => {
                       </td>
                       <td className="px-5 py-4 text-center">
                         <span className="text-xs font-black uppercase bg-gray-100 text-gray-600 px-2 py-1 rounded-md border border-gray-200">
-                          {order.paymentMethod || 'N/D'}
+                          {order.paymentMethod ? paymentMethodLabels[order.paymentMethod] : 'N/D'}
                         </span>
                       </td>
                       <td className="px-5 py-4 text-center">
@@ -2658,7 +2670,7 @@ const MotoboyView = () => {
                     <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Pagamento</p>
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-indigo-600 uppercase">{order.paymentMethod}</span>
+                        <span className="text-[10px] font-bold text-indigo-600 uppercase">{order.paymentMethod ? paymentMethodLabels[order.paymentMethod] : 'N/D'}</span>
                         {order.totalValue && (
                           <p className="text-sm font-bold text-gray-900">
                             R$ {order.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -3811,7 +3823,7 @@ const CheckoutForm = ({ cart, total, onComplete, pixKey, pharmacyId = DEFAULT_PH
     name: '',
     phone: '',
     address: '',
-    paymentMethod: 'pix' as 'dinheiro' | 'cartao' | 'pix',
+    paymentMethod: 'pix' as PaymentMethod,
     deliveryType: 'normal' as DeliveryType,
     change: 0
   });
@@ -3951,7 +3963,7 @@ const CheckoutForm = ({ cart, total, onComplete, pixKey, pharmacyId = DEFAULT_PH
         />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {(['pix', 'cartao', 'dinheiro'] as const).map(method => (
+        {paymentMethods.map(method => (
           <button 
             key={method}
             type="button"
@@ -3961,10 +3973,28 @@ const CheckoutForm = ({ cart, total, onComplete, pixKey, pharmacyId = DEFAULT_PH
               formData.paymentMethod === method ? "bg-indigo-600 border-indigo-600 text-white shadow-lg" : "bg-white border-gray-100 text-gray-500 hover:border-indigo-100"
             )}
           >
-            <span className="uppercase text-[10px] tracking-widest">{method}</span>
+            <span className="uppercase text-[10px] tracking-widest">{paymentMethodLabels[method]}</span>
           </button>
         ))}
       </div>
+
+      <AnimatePresence>
+        {formData.paymentMethod === 'convenio' && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-amber-50 p-6 rounded-2xl border border-amber-100 space-y-2"
+          >
+            <div className="flex items-center gap-3 text-amber-700">
+              <ShieldCheck size={24} />
+              <h5 className="font-bold">Convênio / deixar na conta</h5>
+            </div>
+            <p className="text-sm text-amber-900/70 font-medium">
+              A farmácia vai conferir no sistema interno se este cliente possui convênio ou conta autorizada antes de aprovar o pedido.
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {formData.paymentMethod === 'pix' && (
