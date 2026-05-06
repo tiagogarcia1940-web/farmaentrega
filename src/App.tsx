@@ -393,6 +393,7 @@ const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
 };
 
 const AppUpdateNotice = () => {
+  const [isUpdating, setIsUpdating] = useState(false);
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     offlineReady: [offlineReady, setOfflineReady],
@@ -416,6 +417,21 @@ const AppUpdateNotice = () => {
 
   if (!needRefresh && !offlineReady) return null;
 
+  const handleApplyUpdate = async () => {
+    setIsUpdating(true);
+    let reloaded = false;
+
+    const reload = () => {
+      if (reloaded) return;
+      reloaded = true;
+      window.location.reload();
+    };
+
+    navigator.serviceWorker?.addEventListener('controllerchange', reload, { once: true });
+    await updateServiceWorker(true);
+    window.setTimeout(reload, 1500);
+  };
+
   return (
     <div className="fixed inset-x-4 bottom-4 z-[9999] mx-auto max-w-xl rounded-2xl border border-indigo-100 bg-white p-4 shadow-2xl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -433,10 +449,11 @@ const AppUpdateNotice = () => {
           {needRefresh && (
             <button
               type="button"
-              onClick={() => updateServiceWorker(true)}
-              className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white"
+              onClick={handleApplyUpdate}
+              disabled={isUpdating}
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white disabled:opacity-60"
             >
-              Atualizar
+              {isUpdating ? 'Atualizando...' : 'Atualizar'}
             </button>
           )}
           <button
