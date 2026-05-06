@@ -388,6 +388,17 @@ const AppUpdateNotice = () => {
     offlineReady: [offlineReady, setOfflineReady],
     updateServiceWorker
   } = useRegisterSW({
+    immediate: true,
+    onRegisteredSW(_swScriptUrl, registration) {
+      if (!registration) return;
+      const interval = window.setInterval(() => {
+        registration.update().catch(error => {
+          console.error('Erro ao verificar atualização do PWA:', error);
+        });
+      }, 60 * 1000);
+
+      window.addEventListener('beforeunload', () => window.clearInterval(interval), { once: true });
+    },
     onRegisterError(error) {
       console.error('Erro ao registrar PWA:', error);
     }
