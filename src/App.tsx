@@ -91,11 +91,16 @@ import {
   Menu,
   X,
   AlertTriangle,
-  XCircle
+  XCircle,
+  Upload,
+  Download,
+  Link as LinkIcon
 } from 'lucide-react';
+import * as Papa from 'papaparse';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import { cn, isValidEmail } from './lib/utils';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
@@ -224,12 +229,48 @@ interface AppUser {
   pharmacyId?: string;
 }
 
+interface PharmacySignupData {
+  name: string;
+  cnpj: string;
+  openingHours: string;
+}
+
+interface PharmacyProfile {
+  pharmacyId: string;
+  ownerId?: string;
+  name: string;
+  cnpj: string;
+  openingHours: string;
+  title: string;
+  description: string;
+  deliveryTime: string;
+  heroImage: string;
+  pixKey: string;
+}
+
 const getPharmacyId = (user?: AppUser | null) => user?.pharmacyId || DEFAULT_PHARMACY_ID;
 
 const getInitialPharmacyId = (uid: string, role?: AppUser['role'], isAdmin = false) => {
   if (isAdmin || role === 'client' || !role) return DEFAULT_PHARMACY_ID;
   return `pharmacy_${uid}`;
 };
+
+const getDefaultPharmacyProfile = (
+  pharmacyId: string,
+  ownerId?: string,
+  data?: Partial<PharmacySignupData>
+): PharmacyProfile => ({
+  pharmacyId,
+  ownerId,
+  name: data?.name || 'Farmacia',
+  cnpj: data?.cnpj || '',
+  openingHours: data?.openingHours || 'Segunda a sabado, 08:00 as 20:00',
+  title: data?.name ? `${data.name} Online` : 'Cuidamos de voce em tempo recorde.',
+  description: 'A farmacia online que entende a sua urgencia. Produtos com entrega em ate {time}.',
+  deliveryTime: '40 minutos',
+  heroImage: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=1200&h=600&fit=crop',
+  pixKey: ''
+});
 
 const GOOGLE_LOGIN_ROLE_KEY = 'farmaentrega.googleLoginRole';
 
@@ -289,7 +330,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: (role?: AppUser['role']) => Promise<void>;
   signInWithEmail: (email: string, pass: string, role?: AppUser['role']) => Promise<void>;
-  signUpWithEmail: (email: string, pass: string, name: string, role: AppUser['role']) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name: string, role: AppUser['role'], pharmacyData?: PharmacySignupData) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   signInWithPhone: (phone: string, containerId: string) => Promise<ConfirmationResult>;
   confirmPhoneCode: (result: ConfirmationResult, code: string, role: AppUser['role']) => Promise<void>;
@@ -339,6 +380,58 @@ const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
   }
 
   return <>{children}</>;
+};
+
+const AppUpdateNotice = () => {
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    offlineReady: [offlineReady, setOfflineReady],
+    updateServiceWorker
+  } = useRegisterSW({
+    onRegisterError(error) {
+      console.error('Erro ao registrar PWA:', error);
+    }
+  });
+
+  if (!needRefresh && !offlineReady) return null;
+
+  return (
+    <div className="fixed inset-x-4 bottom-4 z-[9999] mx-auto max-w-xl rounded-2xl border border-indigo-100 bg-white p-4 shadow-2xl">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-black text-gray-900">
+            {needRefresh ? 'Nova atualização disponível' : 'Aplicativo pronto para usar offline'}
+          </p>
+          <p className="text-xs font-medium text-gray-500">
+            {needRefresh
+              ? 'Atualize para carregar a versão mais recente do FarmaEntrega.'
+              : 'Os arquivos principais foram salvos neste dispositivo.'}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {needRefresh && (
+            <button
+              type="button"
+              onClick={() => updateServiceWorker(true)}
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white"
+            >
+              Atualizar
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setNeedRefresh(false);
+              setOfflineReady(false);
+            }}
+            className="rounded-xl bg-gray-100 px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-500"
+          >
+            Depois
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // --- Components ---
@@ -2975,6 +3068,8 @@ const ClientView = ({
 
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const storePharmacyId = new URLSearchParams(location.search).get('pharmacyId') || DEFAULT_PHARMACY_ID;
 
   const toggleFavorite = (productId: string) => {
     setFavorites(prev => 
@@ -2995,16 +3090,10 @@ const ClientView = ({
 
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [storeConfig, setStoreConfig] = useState({
-    title: 'Cuidamos de você em tempo recorde.',
-    description: 'A farmácia online que entende a sua urgência. Milhares de produtos com entrega rápida.',
-    deliveryTime: '40 minutos',
-    heroImage: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=1200&h=600&fit=crop',
-    pixKey: ''
-  });
+  const [storeConfig, setStoreConfig] = useState<PharmacyProfile>(() => getDefaultPharmacyProfile(DEFAULT_PHARMACY_ID));
   
   useEffect(() => {
-    const q = query(collection(db, 'products'), where('pharmacyId', '==', DEFAULT_PHARMACY_ID));
+    const q = query(collection(db, 'products'), where('pharmacyId', '==', storePharmacyId));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
       docs.sort((a, b) => a.name.localeCompare(b.name));
@@ -3013,12 +3102,15 @@ const ClientView = ({
       console.error("Erro ao carregar produtos:", error);
     });
 
-    getDoc(doc(db, 'settings', 'store')).then(snap => {
-      if (snap.exists()) setStoreConfig(snap.data() as any);
+    getDoc(doc(db, 'pharmacies', storePharmacyId)).then(snap => {
+      setStoreConfig(snap.exists()
+        ? ({ ...getDefaultPharmacyProfile(storePharmacyId), ...snap.data() } as PharmacyProfile)
+        : getDefaultPharmacyProfile(storePharmacyId)
+      );
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [storePharmacyId]);
 
   const displayedProducts = selectedCategory 
     ? featuredProducts.filter(p => p.category === selectedCategory) 
@@ -3453,7 +3545,7 @@ const ClientView = ({
                   <p className="text-gray-400 font-medium text-lg italic">Falta pouco para cuidarmos de você!</p>
                 </div>
                 <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-gray-100">
-                  <CheckoutForm pixKey={storeConfig.pixKey} cart={cart} total={cartTotal} onComplete={(o) => { setOrder(o); setActiveTab('tracking'); setCart([]); }} />
+                  <CheckoutForm pixKey={storeConfig.pixKey} pharmacyId={storePharmacyId} cart={cart} total={cartTotal} onComplete={(o) => { setOrder(o); setActiveTab('tracking'); setCart([]); }} />
                 </div>
               </motion.div>
             )}
@@ -3703,7 +3795,7 @@ const ProductCard = ({ product, onAdd, onUpdateQuantity, onView, cartItems = [],
   );
 };
 
-const CheckoutForm = ({ cart, total, onComplete, pixKey }: { cart: CartItem[], total: number, onComplete: (order: Order) => void, pixKey?: string }) => {
+const CheckoutForm = ({ cart, total, onComplete, pixKey, pharmacyId = DEFAULT_PHARMACY_ID }: { cart: CartItem[], total: number, onComplete: (order: Order) => void, pixKey?: string, pharmacyId?: string }) => {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -3776,7 +3868,7 @@ const CheckoutForm = ({ cart, total, onComplete, pixKey }: { cart: CartItem[], t
           paymentMethod: formData.paymentMethod,
           change: formData.change,
           status: 'pending',
-          pharmacyId: DEFAULT_PHARMACY_ID,
+          pharmacyId,
           deliveryType: formData.deliveryType,
           createdAt: now,
           updatedAt: now
@@ -4338,9 +4430,10 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const signUpWithEmail = async (email: string, pass: string, name: string, role: AppUser['role']) => {
+  const signUpWithEmail = async (email: string, pass: string, name: string, role: AppUser['role'], pharmacyData?: PharmacySignupData) => {
     const result = await createUserWithEmailAndPassword(auth, email, pass);
     await updateProfile(result.user, { displayName: name });
+    const pharmacyId = getInitialPharmacyId(result.user.uid, role);
     const newUser: AppUser = {
       uid: result.user.uid,
       name,
@@ -4348,9 +4441,20 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       role,
       photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${result.user.uid}`,
       status: role === 'motoboy' ? 'available' : undefined,
-      pharmacyId: getInitialPharmacyId(result.user.uid, role)
+      pharmacyId
     };
     await setDoc(doc(db, 'users', result.user.uid), newUser, { merge: true });
+    if (role === 'pharmacist') {
+      await setDoc(
+        doc(db, 'pharmacies', pharmacyId),
+        {
+          ...getDefaultPharmacyProfile(pharmacyId, result.user.uid, pharmacyData),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        },
+        { merge: true }
+      );
+    }
   };
 
   const resetPassword = async (email: string) => {
@@ -4671,7 +4775,7 @@ const Dashboard = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) =
   }, [activeRole]);
 
   const roleLabels = {
-    pharmacist: 'Farmacêutico',
+    pharmacist: 'Administrador da Farmácia',
     logistics: 'Logística de Entrega',
     motoboy: 'App Motoboy',
     client: 'Loja do Cliente',
@@ -4691,7 +4795,7 @@ const Dashboard = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) =
   const sidebarVisibleRoles = () => {
     if (user?.role === 'admin' && portal === 'farmacia') {
        return [
-         { id: 'pharmacist', label: 'Farmacêutico', icon: Stethoscope },
+    { id: 'pharmacist', label: 'Administrador da Farmácia', icon: Stethoscope },
          { id: 'logistics', label: 'Expedição Logística', icon: Box },
          { id: 'catalog', label: 'Gerenciar Catálogo', icon: Package },
        ];
@@ -4974,6 +5078,11 @@ const Login = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [pharmacySignup, setPharmacySignup] = useState<PharmacySignupData>({
+    name: '',
+    cnpj: '',
+    openingHours: 'Segunda a sabado, 08:00 as 20:00'
+  });
   
   const [phone, setPhone] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
@@ -5033,7 +5142,14 @@ const Login = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) => {
       if (emailMode === 'signin') {
         await signInWithEmail(email, password, selectedRole);
       } else if (emailMode === 'signup') {
-        await signUpWithEmail(email, password, name, selectedRole);
+        if (portal === 'farmacia') {
+          if (!pharmacySignup.name.trim() || !pharmacySignup.cnpj.trim() || !pharmacySignup.openingHours.trim()) {
+            setError('Preencha nome da farmacia, CNPJ e horarios.');
+            setLoading(false);
+            return;
+          }
+        }
+        await signUpWithEmail(email, password, name, selectedRole, portal === 'farmacia' ? pharmacySignup : undefined);
       } else {
         await resetPassword(email);
         setError('E-mail de recuperação enviado!');
@@ -5163,6 +5279,43 @@ const Login = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) => {
                     value={name}
                     onChange={e => setName(e.target.value)}
                     placeholder="Seu nome"
+                    required
+                  />
+                </div>
+              </div>
+            )}
+            {emailMode === 'signup' && portal === 'farmacia' && (
+              <div className="grid grid-cols-1 gap-3 rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+                <div>
+                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1 mb-1 block">Nome da Farmacia</label>
+                  <input
+                    type="text"
+                    className="w-full p-4 bg-white border border-indigo-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium"
+                    value={pharmacySignup.name}
+                    onChange={e => setPharmacySignup({ ...pharmacySignup, name: e.target.value })}
+                    placeholder="Ex: Drogaria Central"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1 mb-1 block">CNPJ</label>
+                  <input
+                    type="text"
+                    className="w-full p-4 bg-white border border-indigo-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium"
+                    value={pharmacySignup.cnpj}
+                    onChange={e => setPharmacySignup({ ...pharmacySignup, cnpj: e.target.value })}
+                    placeholder="00.000.000/0000-00"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1 mb-1 block">Horarios de Funcionamento</label>
+                  <input
+                    type="text"
+                    className="w-full p-4 bg-white border border-indigo-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium"
+                    value={pharmacySignup.openingHours}
+                    onChange={e => setPharmacySignup({ ...pharmacySignup, openingHours: e.target.value })}
+                    placeholder="Segunda a sabado, 08:00 as 20:00"
                     required
                   />
                 </div>
@@ -5307,18 +5460,14 @@ const CatalogView = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [isEditingStore, setIsEditingStore] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [storeConfig, setStoreConfig] = useState({
-    title: 'Cuidamos de você em tempo recorde.',
-    description: 'A farmácia online que entende a sua urgência. Milhares de produtos com entrega em até {time}.',
-    deliveryTime: '40 minutos',
-    heroImage: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=1200&h=600&fit=crop',
-    pixKey: ''
-  });
+  const [storeConfig, setStoreConfig] = useState<PharmacyProfile>(() => getDefaultPharmacyProfile(DEFAULT_PHARMACY_ID));
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   
   const initialForm = {
     name: '',
     price: 0,
     originalPrice: 0,
+    stock: 0,
     category: 'Medicamentos',
     image: '',
     description: '',
@@ -5330,7 +5479,8 @@ const CatalogView = () => {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'products'), where('pharmacyId', '==', getPharmacyId(user)));
+    const pharmacyId = getPharmacyId(user);
+    const q = query(collection(db, 'products'), where('pharmacyId', '==', pharmacyId));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
       docs.sort((a, b) => a.name.localeCompare(b.name));
@@ -5339,8 +5489,20 @@ const CatalogView = () => {
       console.error("Erro no catalogo", error);
     });
 
-    getDoc(doc(db, 'settings', 'store')).then(snap => {
-      if (snap.exists()) setStoreConfig(snap.data() as any);
+    const pharmacyRef = doc(db, 'pharmacies', pharmacyId);
+    getDoc(pharmacyRef).then(async snap => {
+      if (snap.exists()) {
+        setStoreConfig({ ...getDefaultPharmacyProfile(pharmacyId, user.uid), ...snap.data() } as PharmacyProfile);
+        return;
+      }
+
+      const defaultProfile = getDefaultPharmacyProfile(pharmacyId, user.uid, { name: user.name, cnpj: '', openingHours: '' });
+      setStoreConfig(defaultProfile);
+      await setDoc(pharmacyRef, {
+        ...defaultProfile,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
     });
 
     return () => unsubscribe();
@@ -5348,8 +5510,14 @@ const CatalogView = () => {
 
   const handleSaveStoreConfig = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     try {
-      await setDoc(doc(db, 'settings', 'store'), storeConfig, { merge: true });
+      await setDoc(doc(db, 'pharmacies', getPharmacyId(user)), {
+        ...storeConfig,
+        pharmacyId: getPharmacyId(user),
+        ownerId: storeConfig.ownerId || user.uid,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
       setIsEditingStore(false);
       alert('Configurações da loja atualizadas com sucesso!');
     } catch (error) {
@@ -5404,6 +5572,7 @@ const CatalogView = () => {
       name: product.name,
       price: product.price,
       originalPrice: product.originalPrice || 0,
+      stock: product.stock || 0,
       category: product.category,
       image: product.image,
       description: product.description,
@@ -5414,16 +5583,160 @@ const CatalogView = () => {
     setIsAdding(true);
   };
 
+  const downloadCsv = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleExportProducts = () => {
+    const rows = products.map(product => ({
+      name: product.name,
+      category: product.category,
+      price: product.price,
+      stock: product.stock || 0,
+      description: product.description,
+      specifications: product.specifications || '',
+      howToUse: product.howToUse || '',
+      tags: product.tags?.join('|') || '',
+      image: product.image || ''
+    }));
+    downloadCsv(`estoque-${getPharmacyId(user)}.csv`, Papa.unparse(rows));
+  };
+
+  const handleDownloadTemplate = () => {
+    downloadCsv('template-estoque-farmaentrega.csv', Papa.unparse([
+      {
+        name: 'Dipirona 500mg',
+        category: 'Medicamentos',
+        price: 5.5,
+        stock: 50,
+        description: 'Analgesico e antitermico',
+        specifications: '',
+        howToUse: '',
+        tags: 'Oferta|Mais vendido',
+        image: ''
+      }
+    ]));
+  };
+
+  const handleCopyStoreLink = async () => {
+    const link = `${window.location.origin}/cliente?pharmacyId=${getPharmacyId(user)}`;
+    await navigator.clipboard.writeText(link);
+    alert('Link da loja copiado.');
+  };
+
+  const handleImportProducts = async (file?: File) => {
+    if (!file || !user) return;
+
+    try {
+      const text = await file.text();
+      const result = Papa.parse<Record<string, string>>(text, {
+        header: true,
+        skipEmptyLines: true,
+        transformHeader: header => header.trim()
+      });
+
+      if (result.errors.length) {
+        alert('Erro ao ler CSV. Confira se a primeira linha contem os nomes das colunas.');
+        return;
+      }
+
+      const pharmacyId = getPharmacyId(user);
+      let imported = 0;
+      let updated = 0;
+
+      for (const row of result.data) {
+        const name = row.name?.trim();
+        const price = Number(String(row.price || '').replace(',', '.'));
+        if (!name || !price || Number.isNaN(price)) continue;
+
+        const dataToSave = {
+          name,
+          category: row.category?.trim() || 'Medicamentos',
+          price,
+          stock: Number(row.stock || row.quantity || 0) || 0,
+          description: row.description?.trim() || name,
+          specifications: row.specifications?.trim() || '',
+          howToUse: row.howToUse?.trim() || '',
+          tags: row.tags ? row.tags.split('|').map(tag => tag.trim()).filter(Boolean) : [],
+          image: row.image?.trim() || storeConfig.heroImage,
+          pharmacyId,
+          updatedAt: serverTimestamp()
+        };
+
+        const existing = await getDocs(query(
+          collection(db, 'products'),
+          where('pharmacyId', '==', pharmacyId),
+          where('name', '==', name)
+        ));
+
+        if (existing.empty) {
+          await addDoc(collection(db, 'products'), {
+            ...dataToSave,
+            createdAt: serverTimestamp()
+          });
+          imported++;
+        } else {
+          await updateDoc(doc(db, 'products', existing.docs[0].id), dataToSave);
+          updated++;
+        }
+      }
+
+      alert(`${imported} produtos importados e ${updated} produtos atualizados.`);
+    } catch (error) {
+      console.error(error);
+      alert('Erro ao importar estoque.');
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Gerenciar Catálogo</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={e => handleImportProducts(e.target.files?.[0])}
+          />
+          <button
+            onClick={handleDownloadTemplate}
+            className="bg-white text-gray-600 px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-gray-50 transition-all border border-gray-100 font-bold"
+          >
+            <Download size={20} /> Template
+          </button>
+          <button
+            onClick={() => importInputRef.current?.click()}
+            className="bg-white text-emerald-600 px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-gray-50 transition-all border border-emerald-100 font-bold"
+          >
+            <Upload size={20} /> Importar CSV
+          </button>
+          <button
+            onClick={handleExportProducts}
+            className="bg-white text-gray-600 px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-gray-50 transition-all border border-gray-100 font-bold"
+          >
+            <Download size={20} /> Exportar Estoque
+          </button>
           <button 
             onClick={() => setIsEditingStore(true)}
             className="bg-white text-indigo-600 px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-gray-50 transition-all border border-indigo-100 font-bold"
           >
             <LayoutDashboard size={20} /> Configurar Loja
+          </button>
+          <button
+            onClick={handleCopyStoreLink}
+            className="bg-gray-900 text-white px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-gray-800 transition-all font-bold"
+          >
+            <LinkIcon size={20} /> Link da Loja
           </button>
           <button 
             onClick={() => { setFormData(initialForm); setEditingProduct(null); setIsAdding(true); }}
@@ -5451,6 +5764,18 @@ const CatalogView = () => {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1">Nome da Farmacia</label>
+                  <input required className="w-full p-4 bg-white border border-indigo-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={storeConfig.name} onChange={e => setStoreConfig({...storeConfig, name: e.target.value})} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1">CNPJ</label>
+                  <input required className="w-full p-4 bg-white border border-indigo-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={storeConfig.cnpj} onChange={e => setStoreConfig({...storeConfig, cnpj: e.target.value})} placeholder="00.000.000/0000-00" />
+                </div>
+                <div className="md:col-span-2 space-y-1">
+                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1">Horarios de Funcionamento</label>
+                  <input required className="w-full p-4 bg-white border border-indigo-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={storeConfig.openingHours} onChange={e => setStoreConfig({...storeConfig, openingHours: e.target.value})} placeholder="Segunda a sabado, 08:00 as 20:00" />
+                </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1">Título da Loja</label>
                   <input required className="w-full p-4 bg-white border border-indigo-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={storeConfig.title} onChange={e => setStoreConfig({...storeConfig, title: e.target.value})} />
@@ -5557,6 +5882,10 @@ const CatalogView = () => {
                   <input type="number" step="0.01" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl" value={formData.price || ''} onChange={e => setFormData({...formData, price: parseFloat(e.target.value)})} />
                 </div>
                 <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Estoque</label>
+                  <input type="number" min="0" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl" value={formData.stock || ''} onChange={e => setFormData({...formData, stock: parseInt(e.target.value) || 0})} />
+                </div>
+                <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Preço Antigo / Riscado (R$) (Opcional)</label>
                   <input type="number" step="0.01" className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl" value={formData.originalPrice || ''} onChange={e => setFormData({...formData, originalPrice: parseFloat(e.target.value) || 0})} />
                 </div>
@@ -5627,6 +5956,7 @@ const CatalogView = () => {
             <div className="flex-1">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{product.category}</p>
               <h4 className="font-bold text-gray-900 leading-tight mb-2 line-clamp-2">{product.name}</h4>
+              <p className="text-xs font-bold text-gray-400 mb-2">Estoque: {product.stock || 0}</p>
               <div className="flex items-center gap-2">
                 <span className="text-indigo-600 font-black text-xl">R$ {product.price.toFixed(2)}</span>
                 {product.originalPrice && <span className="text-gray-400 line-through text-sm">R$ {product.originalPrice.toFixed(2)}</span>}
@@ -5659,6 +5989,7 @@ export default function App() {
         <AuthProvider>
           <GlobalStyles />
           <AuthConsumerWrapper />
+          <AppUpdateNotice />
         </AuthProvider>
       </BrowserRouter>
     </ErrorBoundary>

@@ -61,7 +61,7 @@ export const ImportProductsCSV: React.FC<{ pharmacyId: string }> = ({ pharmacyId
         setPreview(products);
         setFile(selectedFile);
         setError(null);
-      } catch (err) {
+      } catch {
         setError('Erro ao processar arquivo CSV');
       }
     };
@@ -82,7 +82,6 @@ export const ImportProductsCSV: React.FC<{ pharmacyId: string }> = ({ pharmacyId
       let imported = 0;
 
       for (const product of preview) {
-        // Verificar se produto já existe
         const q = query(
           collection(db, 'products'),
           where('pharmacyId', '==', pharmacyId),
@@ -116,10 +115,10 @@ export const ImportProductsCSV: React.FC<{ pharmacyId: string }> = ({ pharmacyId
 
   const downloadTemplate = () => {
     const template = `name,category,price,quantity,description,barcode
-Dipirona 500mg,Medicamentos,5.50,50,Analgésico e antitérmico,1234567890123
-Amoxicilina 500mg,Medicamentos,12.50,30,Antibiótico,1234567890124
-Máscara Cirúrgica,Higiene,0.50,1000,Caixa com 50 unidades,1234567890125
-Álcool 70%,Higiene,5.00,100,Desinfetante,1234567890126`;
+Dipirona 500mg,Medicamentos,5.50,50,Analgesico e antitermico,1234567890123
+Amoxicilina 500mg,Medicamentos,12.50,30,Antibiotico,1234567890124
+Mascara Cirurgica,Higiene,0.50,1000,Caixa com 50 unidades,1234567890125
+Alcool 70%,Higiene,5.00,100,Desinfetante,1234567890126`;
 
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -136,28 +135,25 @@ Máscara Cirúrgica,Higiene,0.50,1000,Caixa com 50 unidades,1234567890125
         Importar Produtos em Massa
       </h2>
 
-      {/* Instructions */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
         <h3 className="font-semibold text-blue-900 mb-2">Como funciona:</h3>
         <ol className="list-decimal list-inside text-blue-800 text-sm space-y-1">
-          <li>Baixe o template de CSV clicando no botão abaixo</li>
+          <li>Baixe o template de CSV clicando no botao abaixo</li>
           <li>Abra no Excel ou Google Sheets</li>
-          <li>Preencha com seus produtos (nome, categoria, preço, quantidade)</li>
+          <li>Preencha com seus produtos: nome, categoria, preco e quantidade</li>
           <li>Salve como CSV</li>
           <li>Carregue o arquivo aqui</li>
-          <li>Revise a prévia e confirme a importação</li>
+          <li>Revise a previa e confirme a importacao</li>
         </ol>
       </div>
 
-      {/* Download Template Button */}
       <button
         onClick={downloadTemplate}
         className="mb-6 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
       >
-        📥 Baixar Template CSV
+        Baixar Template CSV
       </button>
 
-      {/* File Upload */}
       <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center mb-6">
         <input
           type="file"
@@ -179,7 +175,6 @@ Máscara Cirúrgica,Higiene,0.50,1000,Caixa com 50 unidades,1234567890125
         </label>
       </div>
 
-      {/* Error Message */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex gap-3">
           <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -187,7 +182,6 @@ Máscara Cirúrgica,Higiene,0.50,1000,Caixa com 50 unidades,1234567890125
         </div>
       )}
 
-      {/* Success Message */}
       {success && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex gap-3">
           <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
@@ -195,11 +189,10 @@ Máscara Cirúrgica,Higiene,0.50,1000,Caixa com 50 unidades,1234567890125
         </div>
       )}
 
-      {/* Preview */}
       {preview.length > 0 && (
         <div className="mb-6">
           <h3 className="font-semibold text-lg mb-3">
-            Prévia: {preview.length} produtos encontrados
+            Previa: {preview.length} produtos encontrados
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
@@ -207,9 +200,9 @@ Máscara Cirúrgica,Higiene,0.50,1000,Caixa com 50 unidades,1234567890125
                 <tr className="bg-gray-100">
                   <th className="border p-2 text-left">Nome</th>
                   <th className="border p-2 text-left">Categoria</th>
-                  <th className="border p-2 text-right">Preço</th>
+                  <th className="border p-2 text-right">Preco</th>
                   <th className="border p-2 text-right">Qtd</th>
-                  <th className="border p-2 text-left">Descrição</th>
+                  <th className="border p-2 text-left">Descricao</th>
                 </tr>
               </thead>
               <tbody>
@@ -229,7 +222,6 @@ Máscara Cirúrgica,Higiene,0.50,1000,Caixa com 50 unidades,1234567890125
             )}
           </div>
 
-          {/* Import Button */}
           <button
             onClick={handleImport}
             disabled={loading}
@@ -250,16 +242,15 @@ Máscara Cirúrgica,Higiene,0.50,1000,Caixa com 50 unidades,1234567890125
         </div>
       )}
 
-      {/* CSV Format Help */}
       <div className="bg-gray-50 rounded-lg p-4 mt-6">
         <h3 className="font-semibold text-gray-900 mb-2">Formato do CSV:</h3>
         <code className="block bg-white p-3 rounded border border-gray-200 text-xs font-mono overflow-x-auto">
           {`name,category,price,quantity,description,barcode
-Dipirona 500mg,Medicamentos,5.50,50,Analgésico,1234567890123
-Amoxicilina 500mg,Medicamentos,12.50,30,Antibiótico,1234567890124`}
+Dipirona 500mg,Medicamentos,5.50,50,Analgesico,1234567890123
+Amoxicilina 500mg,Medicamentos,12.50,30,Antibiotico,1234567890124`}
         </code>
         <p className="text-sm text-gray-600 mt-2">
-          <strong>Campos obrigatórios:</strong> name, category, price, quantity <br />
+          <strong>Campos obrigatorios:</strong> name, category, price, quantity <br />
           <strong>Campos opcionais:</strong> description, barcode
         </p>
       </div>
