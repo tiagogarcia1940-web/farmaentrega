@@ -1716,6 +1716,7 @@ const LogisticsView = () => {
   const [filterEndDate, setFilterEndDate] = useState<string>('');
   const [selectedOrderQR, setSelectedOrderQR] = useState<Order | null>(null);
   const [motoboyInviteUrl, setMotoboyInviteUrl] = useState<string | null>(null);
+  const [isCreatingMotoboyInvite, setIsCreatingMotoboyInvite] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [editData, setEditData] = useState({ 
     items: '', 
@@ -1800,6 +1801,7 @@ const LogisticsView = () => {
 
   const createMotoboyInvite = async () => {
     if (!user) return;
+    setIsCreatingMotoboyInvite(true);
     const token = `${getPharmacyId(user)}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const path = `motoboyInvites/${token}`;
     try {
@@ -1812,7 +1814,10 @@ const LogisticsView = () => {
       });
       setMotoboyInviteUrl(`${window.location.origin}/motoboy?motoboyInvite=${encodeURIComponent(token)}`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, path);
+      console.error('Erro ao criar convite do motoboy:', { error, path });
+      alert('Nao foi possivel gerar o QR do motoboy. Atualize o app e tente novamente.');
+    } finally {
+      setIsCreatingMotoboyInvite(false);
     }
   };
 
@@ -1895,9 +1900,10 @@ const LogisticsView = () => {
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <button
             onClick={createMotoboyInvite}
-            className="bg-white text-indigo-600 px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-50 transition-all border border-indigo-100 font-bold text-xs"
+            disabled={isCreatingMotoboyInvite}
+            className="bg-white text-indigo-600 px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-50 transition-all border border-indigo-100 font-bold text-xs disabled:opacity-60"
           >
-            <QrCode size={16} /> QR Motoboy
+            <QrCode size={16} /> {isCreatingMotoboyInvite ? 'Gerando...' : 'QR Motoboy'}
           </button>
           <button 
             onClick={() => setIsAddingMotoboy(true)}

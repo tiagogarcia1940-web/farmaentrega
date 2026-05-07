@@ -159,9 +159,11 @@ service cloud.firestore {
 
     match /motoboyInvites/{inviteId} {
       allow read: if isSignedIn();
-      allow create: if isStaff() &&
+      allow create: if isAdmin() || (
+        isStaff() &&
         request.resource.data.pharmacyId == userPharmacyId() &&
-        request.resource.data.status == 'active';
+        request.resource.data.status == 'active'
+      );
       allow update: if isAdmin() || (
         isSignedIn() &&
         (
