@@ -884,6 +884,17 @@ const LandingPage = () => {
             ))}
         </div>
 
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => navigate('/demo')}
+            className="inline-flex items-center gap-3 rounded-2xl border border-indigo-100 bg-white px-6 py-4 text-xs font-black uppercase tracking-widest text-indigo-600 shadow-lg shadow-indigo-100/50 transition-all hover:border-indigo-200 hover:bg-indigo-50"
+          >
+            <LayoutDashboard size={18} />
+            Ver demonstracao sem login
+          </button>
+        </div>
+
         <div className="pt-8 opacity-40">
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">
             FarmaEntrega &copy; 2026 • Tecnologia em Logística Farmacêutica
@@ -6164,6 +6175,258 @@ const CatalogView = () => {
   );
 };
 
+const demoOrders = [
+  {
+    id: 'demo-001',
+    code: 'FE-1048',
+    customer: 'Marina Costa',
+    phone: '(11) 98842-1048',
+    address: 'Rua das Acacias, 120',
+    items: 'Dipirona 500mg, Soro fisiologico, Vitamina C',
+    payment: 'Pix',
+    delivery: 'Normal',
+    status: 'Em rota',
+    statusColor: 'emerald',
+    motoboy: 'Tiago Garcia',
+    total: 86.7
+  },
+  {
+    id: 'demo-002',
+    code: 'FE-1049',
+    customer: 'Paulo Mendes',
+    phone: '(11) 97721-4400',
+    address: 'Av. Brasil, 845',
+    items: 'Produto controlado aguardando aprovacao',
+    payment: 'Convenio',
+    delivery: 'Controlado',
+    status: 'Aguardando aprovacao',
+    statusColor: 'amber',
+    motoboy: 'Nao atribuido',
+    total: 142.9
+  },
+  {
+    id: 'demo-003',
+    code: 'FE-1050',
+    customer: 'Ana Ribeiro',
+    phone: '(11) 95510-3321',
+    address: 'Travessa Central, 44',
+    items: 'Fralda geriatrica, Lencos umedecidos',
+    payment: 'Deixar na conta',
+    delivery: 'Urgente',
+    status: 'Preparando',
+    statusColor: 'blue',
+    motoboy: 'Nao atribuido',
+    total: 219.4
+  }
+];
+
+const DemoView = () => {
+  const navigate = useNavigate();
+  const [activeDemo, setActiveDemo] = useState<'farmacia' | 'cliente' | 'motoboy'>('farmacia');
+  const statusStyles: Record<string, string> = {
+    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    amber: 'bg-amber-50 text-amber-700 border-amber-100',
+    blue: 'bg-blue-50 text-blue-700 border-blue-100'
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="sticky top-0 z-40 border-b border-gray-100 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-100">
+              <Bike size={24} />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-gray-900">FarmaEntrega Demo</h1>
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Ambiente demonstrativo sem login</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { id: 'farmacia', label: 'Farmacia', icon: Store },
+              { id: 'cliente', label: 'Cliente', icon: ShoppingCart },
+              { id: 'motoboy', label: 'Motoboy', icon: Bike }
+            ].map(item => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveDemo(item.id as typeof activeDemo)}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-widest transition-colors",
+                  activeDemo === item.id ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                )}
+              >
+                <item.icon size={16} />
+                {item.label}
+              </button>
+            ))}
+            <button type="button" onClick={() => navigate('/')} className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-500 ring-1 ring-gray-200 hover:bg-gray-50">
+              <ArrowLeft size={16} />
+              Voltar
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl space-y-6 px-5 py-6">
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          {[
+            ['Pedidos hoje', '18', Package, 'text-indigo-600'],
+            ['Em rota', '5', Navigation, 'text-emerald-600'],
+            ['Faturamento', 'R$ 2.846', Zap, 'text-amber-600'],
+            ['Motoboys ativos', '4', Bike, 'text-blue-600']
+          ].map(([label, value, Icon, color]) => (
+            <div key={label as string} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{label as string}</p>
+                <Icon size={20} className={color as string} />
+              </div>
+              <p className="text-2xl font-black text-gray-900">{value as string}</p>
+            </div>
+          ))}
+        </section>
+
+        {activeDemo === 'farmacia' && (
+          <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
+            <div className="rounded-3xl border border-gray-100 bg-white shadow-sm">
+              <div className="border-b border-gray-100 p-5">
+                <h2 className="text-lg font-black text-gray-900">Painel da farmacia</h2>
+                <p className="text-sm font-medium text-gray-500">Pedidos com pagamento, tipo de entrega, convenio e atribuicao de motoboy.</p>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {demoOrders.map(order => (
+                  <div key={order.id} className="grid gap-4 p-5 lg:grid-cols-[120px_1fr_150px_140px] lg:items-center">
+                    <div>
+                      <p className="text-xs font-black text-indigo-600">#{order.code}</p>
+                      <p className="text-[11px] font-bold uppercase text-gray-400">{order.delivery}</p>
+                    </div>
+                    <div>
+                      <p className="font-black text-gray-900">{order.customer}</p>
+                      <p className="text-sm text-gray-500">{order.items}</p>
+                      <p className="mt-1 text-xs font-bold text-gray-400">{order.address} - {order.phone}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase text-gray-400">{order.payment}</p>
+                      <p className="font-black text-gray-900">R$ {order.total.toFixed(2)}</p>
+                    </div>
+                    <span className={cn("rounded-full border px-3 py-1 text-center text-[10px] font-black uppercase", statusStyles[order.statusColor])}>
+                      {order.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <aside className="space-y-4">
+              <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+                <h3 className="mb-4 font-black text-gray-900">Produtos exemplo</h3>
+                {['Dipirona 500mg - estoque 42', 'Soro fisiologico - estoque 18', 'Produto controlado - exige aprovacao'].map(item => (
+                  <div key={item} className="mb-3 rounded-2xl bg-gray-50 p-3 text-sm font-bold text-gray-600">{item}</div>
+                ))}
+              </div>
+              <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+                <h3 className="mb-4 font-black text-gray-900">Motoboys</h3>
+                {['Tiago Garcia - Livre', 'Carlos Entregas - Ocupado', 'Nina Express - Livre'].map(item => (
+                  <div key={item} className="mb-3 flex items-center gap-3 rounded-2xl bg-gray-50 p-3 text-sm font-bold text-gray-600">
+                    <Bike size={16} className="text-indigo-600" />
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </aside>
+          </section>
+        )}
+
+        {activeDemo === 'cliente' && (
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px]">
+            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+              <h2 className="mb-5 text-lg font-black text-gray-900">Loja da farmacia</h2>
+              <div className="grid gap-4 md:grid-cols-3">
+                {[
+                  ['Dipirona 500mg', 'R$ 12,90', 'Entrega normal'],
+                  ['Vitamina C', 'R$ 34,90', 'Mais vendido'],
+                  ['Termometro digital', 'R$ 49,90', 'Pronta entrega']
+                ].map(product => (
+                  <div key={product[0]} className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                    <div className="mb-4 flex h-24 items-center justify-center rounded-xl bg-white text-indigo-600">
+                      <Package size={32} />
+                    </div>
+                    <p className="font-black text-gray-900">{product[0]}</p>
+                    <p className="text-lg font-black text-indigo-600">{product[1]}</p>
+                    <p className="text-xs font-bold uppercase text-gray-400">{product[2]}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+              <h3 className="mb-5 font-black text-gray-900">Acompanhamento</h3>
+              <div className="space-y-4">
+                {[
+                  ['Pedido recebido', '12:10', CheckCircle2, 'text-emerald-600'],
+                  ['Pagamento confirmado', '12:12', ShieldCheck, 'text-indigo-600'],
+                  ['Separando produtos', '12:18', Package, 'text-blue-600'],
+                  ['Saiu para entrega', '12:31', Navigation, 'text-amber-600']
+                ].map(([label, time, Icon, color]) => (
+                  <div key={label as string} className="flex items-center gap-4 rounded-2xl bg-gray-50 p-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white">
+                      <Icon size={18} className={color as string} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-black text-gray-900">{label as string}</p>
+                      <p className="text-xs font-bold uppercase text-gray-400">{time as string}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {activeDemo === 'motoboy' && (
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+              <h2 className="mb-5 text-lg font-black text-gray-900">App do motoboy</h2>
+              {demoOrders.filter(order => order.status !== 'Aguardando aprovacao').map(order => (
+                <div key={order.id} className="mb-4 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-black text-gray-900">#{order.code} - {order.customer}</p>
+                      <p className="text-sm font-medium text-gray-500">{order.address}</p>
+                      <p className="mt-2 text-xs font-black uppercase text-indigo-600">{order.items}</p>
+                    </div>
+                    <QrCode size={22} className="text-gray-400" />
+                  </div>
+                  <div className="mt-4 flex gap-2">
+                    <button className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase text-white">Iniciar rota</button>
+                    <button className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-black uppercase text-emerald-700">Entregar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+              <h3 className="mb-5 font-black text-gray-900">Recursos demonstrados</h3>
+              {[
+                'Login por e-mail ou Google',
+                'QR Code para vincular motoboy',
+                'Pedidos por farmacia individual',
+                'Pagamento por convenio/deixar na conta',
+                'Exportacao/importacao de estoque',
+                'Notificacao de atualizacao do aplicativo'
+              ].map(item => (
+                <div key={item} className="mb-3 flex items-center gap-3 rounded-2xl bg-gray-50 p-3 text-sm font-bold text-gray-600">
+                  <CheckCircle2 size={18} className="text-emerald-600" />
+                  {item}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+};
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -6274,6 +6537,7 @@ const AuthConsumerWrapper = () => {
     <>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/demo" element={<DemoView />} />
         <Route path="/cliente/*" element={<PortalLayout portal="cliente" />} />
         <Route path="/farmacia/*" element={<PortalLayout portal="farmacia" />} />
         <Route path="/motoboy/*" element={<PortalLayout portal="motoboy" />} />
