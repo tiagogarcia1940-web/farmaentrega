@@ -1867,6 +1867,30 @@ const LogisticsView = () => {
     }
   };
 
+  const unlinkMotoboy = async (motoboy: AppUser) => {
+    if (!user || motoboy.uid === user.uid) return;
+
+    const confirmed = window.confirm(
+      `Desvincular ${motoboy.name} desta farmacia? Ele deixara de aparecer como motoboy ativo e nao tera mais acesso ao painel do motoboy desta farmacia.`
+    );
+    if (!confirmed) return;
+
+    const path = `users/${motoboy.uid}`;
+    try {
+      await updateDoc(doc(db, 'users', motoboy.uid), {
+        role: 'client',
+        pharmacyId: null,
+        status: 'inactive',
+        motoboyInviteToken: null,
+        unlinkedAt: serverTimestamp(),
+        unlinkedBy: user.uid,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  };
+
   const clearCompletedOrders = async () => {
     if (!window.confirm('Deseja excluir permanentemente todos os pedidos concluídos?')) return;
     const deliveredOrders = orders.filter(o => o.status === 'delivered');
@@ -2285,6 +2309,17 @@ const LogisticsView = () => {
                   )}>
                     {mb.status === 'available' ? 'Livre' : 'Ocupado'}
                   </div>
+                  {mb.uid !== user?.uid && (
+                    <button
+                      type="button"
+                      onClick={() => unlinkMotoboy(mb)}
+                      className="p-2 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                      title="Desvincular motoboy"
+                      aria-label={`Desvincular ${mb.name}`}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

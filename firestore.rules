@@ -66,6 +66,16 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'role', 'pharmacyId', 'status', 'motoboyInviteToken', 'updatedAt'
           ])
+        ) ||
+        (
+          isStaff() &&
+          samePharmacy(resource.data) &&
+          resource.data.role == 'motoboy' &&
+          request.resource.data.role == 'client' &&
+          request.resource.data.pharmacyId == null &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'role', 'pharmacyId', 'status', 'motoboyInviteToken', 'updatedAt', 'unlinkedAt', 'unlinkedBy'
+          ])
         )
       );
 
