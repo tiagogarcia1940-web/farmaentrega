@@ -2280,48 +2280,58 @@ const LogisticsView = () => {
             </span>
           </div>
           
-          <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/40 border border-gray-100 overflow-hidden">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 divide-x divide-y divide-gray-50">
-              {motoboyList.map(mb => (
-                <div key={mb.uid} className="p-6 flex items-center gap-4 hover:bg-indigo-50/10 transition-all group">
-                  <div className="relative">
-                    <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-xl border border-indigo-100/50 shadow-sm group-hover:scale-105 transition-transform">
-                      {mb.name[0]}
-                    </div>
-                    <div className={cn(
-                      "absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-4 border-white shadow-md",
-                      mb.status === 'available' ? "bg-emerald-500" : "bg-amber-500"
-                    )} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-gray-900 text-sm truncate leading-tight">
-                      {mb.name}
-                    </div>
-                    <div className="text-[11px] font-bold text-gray-400 truncate uppercase mt-1 flex items-center gap-1">
-                      <Phone size={10} className="text-indigo-300" /> {mb.phone || 'Sem contato'}
-                    </div>
-                  </div>
-                  <div className={cn(
-                    "text-[10px] font-black uppercase px-2 py-1 rounded-lg shadow-sm border",
-                    mb.status === 'available' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-amber-50 text-amber-600 border-amber-100"
-                  )}>
-                    {mb.status === 'available' ? 'Livre' : 'Ocupado'}
-                  </div>
-                  {mb.uid !== user?.uid && (
-                    <button
-                      type="button"
-                      onClick={() => unlinkMotoboy(mb)}
-                      className="p-2 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-                      title="Desvincular motoboy"
-                      aria-label={`Desvincular ${mb.name}`}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
-              ))}
+          {motoboyList.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-gray-200 bg-white px-6 py-10 text-center shadow-sm">
+              <p className="text-sm font-black uppercase tracking-widest text-gray-400">Nenhum motoboy vinculado</p>
             </div>
-          </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {motoboyList.map(mb => {
+                const displayName = mb.name?.trim() || mb.email || 'Motoboy';
+                return (
+                  <div key={mb.uid} className="flex min-w-0 items-center gap-4 rounded-3xl border border-gray-100 bg-white p-5 shadow-xl shadow-gray-200/40 transition-all hover:border-indigo-100 hover:bg-indigo-50/10">
+                    <div className="relative shrink-0">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-100/50 bg-indigo-50 text-xl font-black text-indigo-600 shadow-sm">
+                        {displayName[0].toUpperCase()}
+                      </div>
+                      <div className={cn(
+                        "absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-4 border-white shadow-md",
+                        mb.status === 'available' ? "bg-emerald-500" : "bg-amber-500"
+                      )} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-black leading-tight text-gray-900">
+                        {displayName}
+                      </div>
+                      <div className="mt-2 flex min-w-0 items-center gap-1 text-[11px] font-bold uppercase text-gray-400">
+                        <Phone size={10} className="shrink-0 text-indigo-300" />
+                        <span className="truncate">{mb.phone || mb.email || 'Sem contato'}</span>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <div className={cn(
+                        "rounded-lg border px-2 py-1 text-[10px] font-black uppercase shadow-sm",
+                        mb.status === 'available' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-amber-50 text-amber-600 border-amber-100"
+                      )}>
+                        {mb.status === 'available' ? 'Livre' : 'Ocupado'}
+                      </div>
+                      {mb.uid !== user?.uid && (
+                        <button
+                          type="button"
+                          onClick={() => unlinkMotoboy(mb)}
+                          className="rounded-xl p-2 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-600"
+                          title="Desvincular motoboy"
+                          aria-label={`Desvincular ${displayName}`}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
