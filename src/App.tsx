@@ -1816,9 +1816,7 @@ const LogisticsView = () => {
     }
   };
 
-  const motoboyList = user?.role === 'admin' 
-    ? [user, ...motoboys.filter(m => m.uid !== user.uid)]
-    : motoboys;
+  const motoboyList = motoboys;
 
   const createMotoboyInvite = async () => {
     if (!user) return;
