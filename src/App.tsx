@@ -881,16 +881,65 @@ const LandingPage = () => {
   );
 };
 
-const LoadingScreen = () => (
-  <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 space-y-4">
-    <motion.div 
-      animate={{ rotate: 360 }}
-      transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-      className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full"
-    />
-    <p className="text-xs font-black uppercase tracking-widest text-indigo-600 animate-pulse">Carregando...</p>
-  </div>
-);
+const loadingMessages = [
+  'Conectando sua operação...',
+  'Preparando sua experiência...',
+  'Organizando pedidos e entregas...',
+  'Carregando o FarmaEntrega...'
+];
+
+const LoadingScreen = () => {
+  const [messageIndex, setMessageIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setMessageIndex(index => (index + 1) % loadingMessages.length);
+    }, 900);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-6 text-center">
+      <div className="relative mb-8">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1.1, ease: "linear" }}
+          className="h-20 w-20 rounded-3xl border-4 border-indigo-100 border-t-indigo-600 bg-white shadow-2xl shadow-indigo-100"
+        />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Bike size={30} className="text-indigo-600" />
+        </div>
+      </div>
+
+      <h1 className="mb-3 text-3xl font-black tracking-tight text-gray-900">
+        Farma<span className="text-indigo-600">Entrega</span>
+      </h1>
+
+      <AnimatePresence mode="wait">
+        <motion.p
+          key={loadingMessages[messageIndex]}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.25 }}
+          className="min-h-6 text-sm font-black uppercase tracking-widest text-indigo-600"
+        >
+          {loadingMessages[messageIndex]}
+        </motion.p>
+      </AnimatePresence>
+
+      <div className="mt-8 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-indigo-100">
+        <motion.div
+          className="h-full rounded-full bg-indigo-600"
+          initial={{ x: '-100%' }}
+          animate={{ x: '100%' }}
+          transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
+        />
+      </div>
+    </div>
+  );
+};
 
 const PortalLayout = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) => {
   const { user, loading } = useAuth();
@@ -6117,12 +6166,21 @@ export default function App() {
 }
 
 const AuthConsumerWrapper = () => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  const [showStartupLoading, setShowStartupLoading] = useState(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const notifiedStatuses = useRef<Record<string, string>>({});
 
   useEffect(() => {
     testConnection();
+  }, []);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setShowStartupLoading(false);
+    }, 3600);
+
+    return () => window.clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
@@ -6194,6 +6252,10 @@ const AuthConsumerWrapper = () => {
   const removeNotification = (id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
+
+  if (loading || showStartupLoading) {
+    return <LoadingScreen />;
+  }
 
   return (
     <>
