@@ -151,8 +151,12 @@ interface FirestoreErrorInfo {
 
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const currentUser = auth.currentUser;
+  const errorCode = typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : '';
+  const errorMessage = error instanceof Error ? error.message : String(error);
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errorMessage,
     authInfo: {
       userId: currentUser?.uid,
       email: currentUser?.email,
@@ -170,6 +174,15 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     path
   };
   console.error('Firestore Error Detail:', errInfo);
+
+  if (
+    errorCode === 'permission-denied' &&
+    (operationType === OperationType.LIST || operationType === OperationType.GET)
+  ) {
+    console.warn('Leitura bloqueada apos mudanca de permissao. A tela seguira sem recarregar.', errInfo);
+    return;
+  }
+
   throw new Error(JSON.stringify(errInfo));
 }
 
