@@ -6230,46 +6230,72 @@ const DemoView = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="sticky top-0 z-40 border-b border-gray-100 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-100">
-              <Bike size={24} />
+    <div className="min-h-screen overflow-x-hidden bg-gray-50 md:flex">
+      <aside className="border-b border-gray-100 bg-white shadow-sm md:sticky md:top-0 md:h-screen md:w-72 md:shrink-0 md:border-b-0 md:border-r">
+        <div className="border-b border-gray-50 p-6 md:p-8">
+          <button onClick={() => navigate('/')} className="flex items-center gap-3 group">
+            <div className="rounded-xl bg-indigo-600 p-2 text-white shadow-lg shadow-indigo-100 transition-transform group-hover:rotate-12">
+              <Store size={24} />
             </div>
             <div>
-              <h1 className="text-xl font-black text-gray-900">FarmaEntrega Demo</h1>
-              <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Ambiente demonstrativo sem login</p>
+              <h1 className="text-xl font-black italic tracking-tight text-gray-900">Farma<span className="text-indigo-600">Entrega</span></h1>
+              <p className="mt-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-400">modo demo</p>
             </div>
+          </button>
+        </div>
+
+        <nav className="space-y-2 p-6">
+          <div className="px-3 pb-2 text-[8px] font-black uppercase tracking-[0.3em] text-gray-300">Setores</div>
+          {[
+            { id: 'farmacia', label: 'Painel da Farmacia', icon: Store },
+            { id: 'cliente', label: 'Loja do Cliente', icon: ShoppingCart },
+            { id: 'motoboy', label: 'App Motoboy', icon: Bike }
+          ].map(item => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveDemo(item.id as typeof activeDemo)}
+              className={cn(
+                "flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-widest transition-all",
+                activeDemo === item.id ? "bg-indigo-600 text-white shadow-xl shadow-indigo-100" : "text-gray-400 hover:bg-gray-50 hover:text-gray-900"
+              )}
+            >
+              <item.icon size={18} />
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="hidden p-6 md:block">
+          <div className="rounded-3xl border border-indigo-50 bg-indigo-50/50 p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Demonstracao</p>
+            <p className="mt-2 text-xs font-bold leading-relaxed text-gray-500">
+              Dados ficticios para apresentar o app sem login e sem alterar o Firebase.
+            </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { id: 'farmacia', label: 'Farmacia', icon: Store },
-              { id: 'cliente', label: 'Cliente', icon: ShoppingCart },
-              { id: 'motoboy', label: 'Motoboy', icon: Bike }
-            ].map(item => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setActiveDemo(item.id as typeof activeDemo)}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-widest transition-colors",
-                  activeDemo === item.id ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                )}
-              >
-                <item.icon size={16} />
-                {item.label}
-              </button>
-            ))}
-            <button type="button" onClick={() => navigate('/')} className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-500 ring-1 ring-gray-200 hover:bg-gray-50">
+        </div>
+      </aside>
+
+      <main className="min-w-0 flex-1">
+        <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/90 px-5 py-4 backdrop-blur">
+          <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-400">Ambiente demonstrativo sem login</p>
+              <h2 className="text-2xl font-black tracking-tight text-gray-900">
+                {activeDemo === 'farmacia' ? 'Administrador da Farmacia' : activeDemo === 'cliente' ? 'Loja do Cliente' : 'App Motoboy'}
+              </h2>
+            </div>
+            <button type="button" onClick={() => navigate('/')} className="inline-flex w-fit items-center gap-2 rounded-xl bg-gray-100 px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-500 hover:bg-gray-200">
               <ArrowLeft size={16} />
               Voltar
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="mx-auto max-w-7xl space-y-6 px-5 py-6">
+        <div className="mx-auto max-w-7xl space-y-6 px-5 py-6">
+        <div className="rounded-3xl border border-amber-100 bg-amber-50 p-4 text-sm font-bold text-amber-800">
+          Esta tela replica os setores principais com dados ficticios. Botoes e pedidos sao apenas demonstrativos.
+        </div>
         <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
           {[
             ['Pedidos hoje', '18', Package, 'text-indigo-600'],
@@ -6422,6 +6448,7 @@ const DemoView = () => {
             </div>
           </section>
         )}
+        </div>
       </main>
     </div>
   );
