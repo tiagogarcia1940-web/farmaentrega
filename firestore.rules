@@ -77,6 +77,12 @@ service cloud.firestore {
         resource.data.customerId == request.auth.uid ||
         (hasUserDoc() && resource.data.customerPhone == userDoc().phone) ||
         resource.data.motoboyId == request.auth.uid ||
+        (
+          hasRole('motoboy') &&
+          samePharmacy(resource.data) &&
+          resource.data.status == 'approved' &&
+          resource.data.motoboyId == null
+        ) ||
         isAdmin() ||
         (isStaff() && samePharmacy(resource.data))
       );
@@ -114,6 +120,17 @@ service cloud.firestore {
           hasRole('logistics') &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'motoboyId', 'motoboyName', 'status', 'approvedAt', 'updatedAt'
+          ])
+        ) ||
+        (
+          samePharmacy(resource.data) &&
+          samePharmacy(request.resource.data) &&
+          hasRole('motoboy') &&
+          resource.data.status == 'approved' &&
+          resource.data.motoboyId == null &&
+          request.resource.data.motoboyId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'motoboyId', 'motoboyName', 'status', 'inTransitAt', 'updatedAt'
           ])
         ) ||
         (
