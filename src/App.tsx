@@ -95,7 +95,7 @@ import {
 } from 'lucide-react';
 import * as Papa from 'papaparse';
 import { QRCodeCanvas } from 'qrcode.react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { cn, isValidEmail } from './lib/utils';
@@ -456,25 +456,51 @@ const AppUpdateNotice = () => {
 // --- Components ---
 
 const QRScanner = ({ onScan, onClose }: { onScan: (data: string) => void; onClose: () => void }) => {
-  useEffect(() => {
-    const scanner = new Html5QrcodeScanner(
-      "reader",
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      /* verbose= */ false
-    );
+  const readerIdRef = useRef(`reader-${Math.random().toString(36).slice(2)}`);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
-    scanner.render(
-      (decodedText) => {
+  useEffect(() => {
+    let stopped = false;
+    const scanner = new Html5Qrcode(readerIdRef.current, false);
+    scannerRef.current = scanner;
+
+    scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 260, height: 260 }, aspectRatio: 1 },
+      async (decodedText) => {
+        if (stopped) return;
+        stopped = true;
+        try {
+          await scanner.stop();
+          scanner.clear();
+        } catch (error) {
+          console.error('Erro ao fechar leitor de QR:', error);
+        }
         onScan(decodedText);
-        scanner.clear();
       },
-      (error) => {
-        // console.warn(error);
+      () => {}
+    ).catch((error) => {
+      console.error('Erro ao abrir camera para QR:', error);
+      if (!stopped) {
+        setCameraError('Nao foi possivel abrir a camera. Verifique a permissao da camera no navegador e tente novamente.');
       }
-    );
+    });
 
     return () => {
-      scanner.clear().catch(err => console.error("Failed to clear scanner", err));
+      stopped = true;
+      const activeScanner = scannerRef.current;
+      scannerRef.current = null;
+      if (!activeScanner) return;
+      activeScanner.stop()
+        .catch(() => undefined)
+        .finally(() => {
+          try {
+            activeScanner.clear();
+          } catch (error) {
+            console.error('Erro ao limpar leitor de QR:', error);
+          }
+        });
     };
   }, [onScan]);
 
@@ -489,8 +515,9 @@ const QRScanner = ({ onScan, onClose }: { onScan: (data: string) => void; onClos
             <Plus className="rotate-45" size={24} />
           </button>
         </div>
-        <div id="reader" className="w-full"></div>
+        <div id={readerIdRef.current} className="min-h-[320px] w-full bg-black"></div>
         <div className="p-4 text-center text-sm text-gray-500">
+          {cameraError && <p className="mb-2 font-bold text-red-600">{cameraError}</p>}
           Aponte a câmera para o QR Code do pedido impresso.
         </div>
       </div>
