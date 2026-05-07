@@ -868,13 +868,28 @@ const LoadingScreen = () => (
 const PortalLayout = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+  const handledInviteRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     const params = new URLSearchParams(location.search);
     const inviteToken = params.get('motoboyInvite');
-    if (!inviteToken) return;
+    if (!inviteToken) {
+      handledInviteRef.current = null;
+      return;
+    }
+
+    if (user.role === 'motoboy' && user.motoboyInviteToken === inviteToken) {
+      window.history.replaceState(null, '', '/motoboy');
+      setInviteStatus(null);
+      navigate('/motoboy', { replace: true });
+      return;
+    }
+
+    if (handledInviteRef.current === inviteToken) return;
+    handledInviteRef.current = inviteToken;
 
     let cancelled = false;
     const applyInvite = async () => {
@@ -900,10 +915,16 @@ const PortalLayout = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }
 
         if (!cancelled) {
           setInviteStatus('Motoboy vinculado com sucesso. Redirecionando...');
-          window.setTimeout(() => window.location.replace('/motoboy'), 800);
+          window.setTimeout(() => {
+            if (cancelled) return;
+            window.history.replaceState(null, '', '/motoboy');
+            setInviteStatus(null);
+            navigate('/motoboy', { replace: true });
+          }, 600);
         }
       } catch (error) {
         console.error(error);
+        handledInviteRef.current = null;
         if (!cancelled) setInviteStatus('Nao foi possivel vincular este convite. Peça um novo QR Code para a farmacia.');
       }
     };
@@ -912,7 +933,7 @@ const PortalLayout = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }
     return () => {
       cancelled = true;
     };
-  }, [user, location.search]);
+  }, [user, location.search, navigate]);
   
   if (loading) return <LoadingScreen />;
 
