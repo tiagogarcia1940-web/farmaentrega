@@ -2285,11 +2285,11 @@ const LogisticsView = () => {
               <p className="text-sm font-black uppercase tracking-widest text-gray-400">Nenhum motoboy vinculado</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-3">
               {motoboyList.map(mb => {
                 const displayName = mb.name?.trim() || mb.email || 'Motoboy';
                 return (
-                  <div key={mb.uid} className="flex min-w-0 items-center gap-4 rounded-3xl border border-gray-100 bg-white p-5 shadow-xl shadow-gray-200/40 transition-all hover:border-indigo-100 hover:bg-indigo-50/10">
+                  <div key={mb.uid} className="flex min-w-0 items-start gap-4 rounded-3xl border border-gray-100 bg-white p-5 shadow-xl shadow-gray-200/40 transition-all hover:border-indigo-100 hover:bg-indigo-50/10">
                     <div className="relative shrink-0">
                       <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-100/50 bg-indigo-50 text-xl font-black text-indigo-600 shadow-sm">
                         {displayName[0].toUpperCase()}
@@ -2300,15 +2300,15 @@ const LogisticsView = () => {
                       )} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-black leading-tight text-gray-900">
+                      <div className="break-words text-sm font-black leading-snug text-gray-900">
                         {displayName}
                       </div>
-                      <div className="mt-2 flex min-w-0 items-center gap-1 text-[11px] font-bold uppercase text-gray-400">
+                      <div className="mt-2 flex min-w-0 items-start gap-1 text-[11px] font-bold uppercase leading-snug text-gray-400">
                         <Phone size={10} className="shrink-0 text-indigo-300" />
-                        <span className="truncate">{mb.phone || mb.email || 'Sem contato'}</span>
+                        <span className="break-all">{mb.phone || mb.email || 'Sem contato'}</span>
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2 pt-1">
                       <div className={cn(
                         "rounded-lg border px-2 py-1 text-[10px] font-black uppercase shadow-sm",
                         mb.status === 'available' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-amber-50 text-amber-600 border-amber-100"
