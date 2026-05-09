@@ -22,8 +22,16 @@ service cloud.firestore {
              (data.pharmacyId == null ? 'farmaentrega-matriz' : data.pharmacyId) == userPharmacyId();
     }
 
+    function isClaimAdmin() {
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        request.auth.token.platformAdmin == true
+      );
+    }
+
     function isAdmin() {
       return isSignedIn() && (
+        isClaimAdmin() ||
         request.auth.token.email == "xtiaguinhox65@gmail.com" ||
         (hasUserDoc() && userDoc().role == 'admin')
       );
@@ -37,6 +45,14 @@ service cloud.firestore {
       return isAdmin() || hasRole('pharmacist') || hasRole('logistics');
     }
 
+    function isPublicStoreData(data) {
+      return !('secret' in data) &&
+             !('token' in data) &&
+             !('apiKey' in data) &&
+             !('privateKey' in data) &&
+             !('password' in data);
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn() && (
         request.auth.uid == userId ||
@@ -45,16 +61,35 @@ service cloud.firestore {
       );
 
       allow create: if isSignedIn() && (
-        request.auth.uid == userId ||
         isAdmin() ||
-        (isStaff() && request.resource.data.role == 'motoboy' && samePharmacy(request.resource.data))
+        (
+          request.auth.uid == userId &&
+          request.resource.data.uid == userId &&
+          request.resource.data.email == request.auth.token.email &&
+          request.resource.data.role in ['client', 'pharmacist', 'motoboy'] &&
+          request.resource.data.diff({}).affectedKeys().hasOnly([
+            'uid', 'name', 'email', 'role', 'photoURL', 'phone', 'address',
+            'status', 'pharmacyId', 'createdAt', 'updatedAt'
+          ])
+        ) ||
+        (
+          isStaff() &&
+          request.resource.data.role == 'motoboy' &&
+          samePharmacy(request.resource.data)
+        )
       );
 
       allow update: if isSignedIn() && (
         isAdmin() ||
         (
           request.auth.uid == userId &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'pharmacyId'])
+          request.resource.data.uid == resource.data.uid &&
+          request.resource.data.email == resource.data.email &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.pharmacyId == resource.data.pharmacyId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name', 'phone', 'address', 'photoURL', 'updatedAt'
+          ])
         ) ||
         (
           request.auth.uid == userId &&
@@ -85,20 +120,18 @@ service cloud.firestore {
     match /orders/{orderId} {
       allow read: if isSignedIn() && (
         resource.data.customerId == request.auth.uid ||
-        (hasUserDoc() && resource.data.customerPhone == userDoc().phone) ||
         resource.data.motoboyId == request.auth.uid ||
-        (
-          hasRole('motoboy') &&
-          samePharmacy(resource.data) &&
-          resource.data.status == 'approved' &&
-          resource.data.motoboyId == null
-        ) ||
         isAdmin() ||
         (isStaff() && samePharmacy(resource.data))
       );
 
       allow create: if isSignedIn() &&
         request.resource.data.status == 'pending' &&
+        request.resource.data.diff({}).affectedKeys().hasOnly([
+          'orderCode', 'customerName', 'customerAddress', 'customerPhone',
+          'customerId', 'items', 'totalValue', 'paymentMethod', 'change',
+          'status', 'pharmacyId', 'deliveryType', 'createdAt', 'updatedAt'
+        ]) &&
         (
           (
             request.resource.data.customerId == request.auth.uid &&
@@ -136,17 +169,8 @@ service cloud.firestore {
           samePharmacy(resource.data) &&
           samePharmacy(request.resource.data) &&
           hasRole('motoboy') &&
-          resource.data.status == 'approved' &&
-          resource.data.motoboyId == null &&
-          request.resource.data.motoboyId == request.auth.uid &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'motoboyId', 'motoboyName', 'status', 'inTransitAt', 'updatedAt'
-          ])
-        ) ||
-        (
-          samePharmacy(resource.data) &&
-          samePharmacy(request.resource.data) &&
           resource.data.motoboyId == request.auth.uid &&
+          request.resource.data.motoboyId == resource.data.motoboyId &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'status', 'inTransitAt', 'deliveredAt', 'updatedAt', 'location',
             'deliveryLocation', 'deliveryProof'
@@ -185,29 +209,44 @@ service cloud.firestore {
     }
 
     match /motoboyInvites/{inviteId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin() ||
+        (
+          isStaff() &&
+          resource.data.pharmacyId == userPharmacyId()
+        ) ||
+        (
+          isSignedIn() &&
+          resource.data.status == 'active'
+        );
       allow create: if isAdmin() || (
         isStaff() &&
         request.resource.data.pharmacyId == userPharmacyId() &&
-        request.resource.data.status == 'active'
+        request.resource.data.status == 'active' &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.diff({}).affectedKeys().hasOnly([
+          'token', 'pharmacyId', 'createdBy', 'status', 'createdAt'
+        ])
       );
       allow update: if isAdmin() || (
         isSignedIn() &&
-        (
-          (isStaff() && resource.data.pharmacyId == userPharmacyId()) ||
-          request.resource.data.lastLinkedUserId == request.auth.uid
-        )
+        resource.data.status == 'active' &&
+        request.resource.data.pharmacyId == resource.data.pharmacyId &&
+        request.resource.data.token == resource.data.token &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'lastLinkedUserId', 'lastLinkedAt'
+        ]) &&
+        request.resource.data.lastLinkedUserId == request.auth.uid
       );
       allow delete: if isAdmin();
     }
 
     match /settings/{docId} {
-      allow read: if true;
+      allow read: if docId in ['public', 'store'] && isPublicStoreData(resource.data);
       allow write: if isStaff() || isAdmin();
     }
 
     match /products/{productId} {
-      allow read: if true;
+      allow read: if isPublicStoreData(resource.data);
       allow create: if isAdmin() || (isStaff() && samePharmacy(request.resource.data));
       allow update: if isAdmin() || (isStaff() && samePharmacy(resource.data) && samePharmacy(request.resource.data));
       allow delete: if isAdmin() || (isStaff() && samePharmacy(resource.data));
