@@ -4156,44 +4156,40 @@ const CheckoutForm = ({ cart, total, onComplete, pixKey, pharmacyId = DEFAULT_PH
     console.log("Iniciando transação para pedido sequencial...");
     
     try {
-      const orderData = await runTransaction(db, async (transaction) => {
-        const counterRef = doc(db, 'counters', 'orders');
-        const counterSnap = await transaction.get(counterRef);
-        
-        let nextNumber = 1;
-        if (counterSnap.exists()) {
-          const data = counterSnap.data();
-          nextNumber = (Number(data?.lastNumber) || 0) + 1;
-        }
-        
-        // Atualiza o contador de pedidos
-        transaction.set(counterRef, { lastNumber: nextNumber }, { merge: true });
-        
-        const orderCode = nextNumber.toString();
-        const newOrderRef = doc(collection(db, 'orders'));
-        
-        // Criamos o objeto do pedido
-        const now = Timestamp.now();
-        const newOrder = {
-          orderCode,
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Sessao invalida. Entre novamente.');
+
+      const response = await fetch('/api/create-order', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          pharmacyId,
           customerName: formData.name,
           customerAddress: formData.address,
           customerPhone: formData.phone,
-          customerId: user.uid,
-          items: cart.map(i => `${i.quantity}x ${i.name}`).join(', '),
-          totalValue: total,
           paymentMethod: formData.paymentMethod,
-          change: formData.change,
-          status: 'pending',
-          pharmacyId,
           deliveryType: formData.deliveryType,
-          createdAt: now,
-          updatedAt: now
-        };
-        
-        transaction.set(newOrderRef, newOrder);
-        return { id: newOrderRef.id, ...newOrder } as Order;
+          change: formData.change,
+          cart: cart.map(item => ({
+            productId: item.id,
+            quantity: item.quantity
+          }))
+        })
       });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.error || 'Nao foi possivel finalizar o pedido.');
+      }
+
+      const orderSnap = await getDoc(doc(db, 'orders', result.orderId));
+      if (!orderSnap.exists()) {
+        throw new Error('Pedido criado, mas nao foi possivel carregar os dados.');
+      }
+      const orderData = { id: orderSnap.id, ...orderSnap.data() } as Order;
 
       console.log("Pedido finalizado com sucesso:", orderData.orderCode);
       
