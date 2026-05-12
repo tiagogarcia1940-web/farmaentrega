@@ -202,6 +202,24 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
 
 const paymentMethods: PaymentMethod[] = ['pix', 'cartao', 'dinheiro', 'convenio'];
 
+const money = (value?: number) =>
+  Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const getChangeDue = (order: Pick<Order, 'paymentMethod' | 'change' | 'totalValue'>) => {
+  if (order.paymentMethod !== 'dinheiro') return 0;
+  const changeFor = Number(order.change || 0);
+  const totalValue = Number(order.totalValue || 0);
+  return changeFor > totalValue ? Number((changeFor - totalValue).toFixed(2)) : 0;
+};
+
+const getChangeLabel = (order: Pick<Order, 'paymentMethod' | 'change' | 'totalValue'>) => {
+  if (order.paymentMethod !== 'dinheiro') return 'Sem troco';
+  const changeFor = Number(order.change || 0);
+  const changeDue = getChangeDue(order);
+  if (!changeFor || !changeDue) return 'Sem troco';
+  return `Troco para R$ ${money(changeFor)} • Levar R$ ${money(changeDue)}`;
+};
+
 interface Order {
   id: string;
   orderCode: string;
@@ -1185,8 +1203,17 @@ const PharmacistView = () => {
     const mockLng = -46.6333 + (Math.random() - 0.5) * 0.05;
     
     try {
+      const totalValue = Number(newOrder.totalValue || 0);
+      const change = newOrder.paymentMethod === 'dinheiro' ? Number(newOrder.change || 0) : 0;
+      if (change > 0 && change <= totalValue) {
+        alert('O valor para troco deve ser maior que o valor do pedido.');
+        return;
+      }
+
       await addDoc(collection(db, path), {
         ...newOrder,
+        totalValue,
+        change,
         orderCode,
         status: 'pending',
         pharmacistId: user?.uid,
@@ -1267,10 +1294,17 @@ const PharmacistView = () => {
     if (!editingOrder) return;
     const path = `orders/${editingOrder.id}`;
     try {
+      const totalValue = Number(editData.totalValue || 0);
+      const change = editingOrder.paymentMethod === 'dinheiro' ? Number(editData.change || 0) : 0;
+      if (change > 0 && change <= totalValue) {
+        alert('O valor para troco deve ser maior que o valor do pedido.');
+        return;
+      }
+
       await updateDoc(doc(db, 'orders', editingOrder.id), {
         items: editData.items,
-        change: editData.change,
-        totalValue: editData.totalValue,
+        change,
+        totalValue,
         customerName: editData.customerName,
         customerAddress: editData.customerAddress,
         customerPhone: editData.customerPhone,
@@ -1440,15 +1474,51 @@ const PharmacistView = () => {
                 />
               </div>
               <div className="md:col-span-1 space-y-2">
-                <label className="text-sm font-medium text-gray-700">Troco (R$)</label>
-                <input 
-                  type="number"
-                  step="0.01"
-                  placeholder="0,00"
-                  className="w-full p-2 border rounded-lg"
-                  value={newOrder.change || ''}
-                  onChange={e => setNewOrder({...newOrder, change: parseFloat(e.target.value)})}
-                />
+                <label className="text-sm font-medium text-gray-700">Troco</label>
+                {newOrder.paymentMethod === 'dinheiro' ? (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewOrder({...newOrder, change: 0})}
+                        className={cn(
+                          "flex-1 p-2 rounded-lg border text-sm font-bold",
+                          !newOrder.change ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-500 border-gray-200"
+                        )}
+                      >
+                        Não
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewOrder({...newOrder, change: newOrder.change || Math.ceil(Number(newOrder.totalValue || 0) / 10) * 10})}
+                        className={cn(
+                          "flex-1 p-2 rounded-lg border text-sm font-bold",
+                          newOrder.change ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-500 border-gray-200"
+                        )}
+                      >
+                        Sim
+                      </button>
+                    </div>
+                    {Boolean(newOrder.change) && (
+                      <>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="Troco para quanto?"
+                          className="w-full p-2 border rounded-lg"
+                          value={newOrder.change || ''}
+                          onChange={e => setNewOrder({...newOrder, change: parseFloat(e.target.value) || 0})}
+                        />
+                        <p className="text-xs font-bold text-emerald-600">
+                          Levar troco de R$ {money(Math.max(Number(newOrder.change || 0) - Number(newOrder.totalValue || 0), 0))}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg bg-gray-50 text-xs font-bold text-gray-400">Não se aplica</div>
+                )}
               </div>
               <div className="md:col-span-2 space-y-2">
                 <label className="text-sm font-medium text-gray-700">Forma de Pagamento</label>
@@ -1460,7 +1530,7 @@ const PharmacistView = () => {
                         name="paymentMethod" 
                         value={method}
                         checked={newOrder.paymentMethod === method}
-                        onChange={() => setNewOrder({...newOrder, paymentMethod: method})}
+                        onChange={() => setNewOrder({...newOrder, paymentMethod: method, change: method === 'dinheiro' ? newOrder.change : 0})}
                         className="text-indigo-600 focus:ring-indigo-500"
                       />
                       <span className="text-sm">{paymentMethodLabels[method]}</span>
@@ -1568,15 +1638,25 @@ const PharmacistView = () => {
                       onChange={e => setEditData({...editData, totalValue: parseFloat(e.target.value)})}
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Troco Necessário (R$)</label>
-                    <input 
-                      type="number"
-                      step="0.01"
-                      className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-black text-emerald-600"
-                      value={editData.change}
-                      onChange={e => setEditData({...editData, change: parseFloat(e.target.value)})}
-                    />
+                <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Troco</label>
+                    {editingOrder?.paymentMethod === 'dinheiro' ? (
+                      <div className="space-y-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-black text-emerald-600"
+                          value={editData.change}
+                          onChange={e => setEditData({...editData, change: parseFloat(e.target.value) || 0})}
+                          placeholder="Troco para quanto?"
+                        />
+                        <p className="text-xs font-bold text-emerald-600">
+                          {editData.change ? `Levar troco de R$ ${money(Math.max(Number(editData.change || 0) - Number(editData.totalValue || 0), 0))}` : 'Sem troco'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-400">Não se aplica</div>
+                    )}
                   </div>
                   <div className="md:col-span-2 space-y-1">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tipo de Entrega</label>
@@ -1654,8 +1734,8 @@ const PharmacistView = () => {
                 <td className="px-6 py-4 text-sm text-gray-600">{order.items}</td>
                 <td className="px-6 py-4">
                   <div className="text-sm font-bold text-gray-900">R$ {order.totalValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                  {order.change ? (
-                    <div className="text-[10px] font-bold text-emerald-600">Troco: R$ {order.change.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                  {getChangeDue(order) ? (
+                    <div className="text-[10px] font-bold text-emerald-600">{getChangeLabel(order)}</div>
                   ) : (
                     <div className="text-[10px] font-bold text-gray-300">Sem troco</div>
                   )}
@@ -2284,9 +2364,9 @@ const LogisticsView = () => {
                         <div className="text-sm font-black text-gray-900">
                           R$ {order.totalValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </div>
-                        {order.change ? (
+                        {getChangeDue(order) ? (
                           <div className="text-[11px] font-bold text-emerald-600 mt-0.5">
-                            Troco: R$ {order.change.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            {getChangeLabel(order)}
                           </div>
                         ) : (
                           <div className="text-[11px] font-bold text-gray-300 mt-0.5 whitespace-nowrap">Sem troco</div>
@@ -2509,14 +2589,23 @@ const LogisticsView = () => {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Troco (R$)</label>
-                    <input 
-                      type="number"
-                      step="0.01"
-                      className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl mt-1 focus:ring-2 focus:ring-indigo-500 outline-none"
-                      value={editData.change}
-                      onChange={e => setEditData({...editData, change: parseFloat(e.target.value)})}
-                    />
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Troco para quanto?</label>
+                    {editingOrder?.paymentMethod === 'dinheiro' ? (
+                      <>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl mt-1 focus:ring-2 focus:ring-indigo-500 outline-none"
+                          value={editData.change}
+                          onChange={e => setEditData({...editData, change: parseFloat(e.target.value) || 0})}
+                        />
+                        <p className="text-xs font-bold text-emerald-600 mt-1">
+                          {editData.change ? `Levar troco de R$ ${money(Math.max(Number(editData.change || 0) - Number(editData.totalValue || 0), 0))}` : 'Sem troco'}
+                        </p>
+                      </>
+                    ) : (
+                      <div className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl mt-1 text-sm font-bold text-gray-400">Não se aplica</div>
+                    )}
                   </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tipo de Entrega</label>
@@ -4145,6 +4234,11 @@ const CheckoutForm = ({ cart, total, onComplete, pixKey, pharmacyId = DEFAULT_PH
     if (!formData.phone.trim()) { alert("Por favor, preencha o seu WhatsApp."); return; }
     if (!formData.address.trim()) { alert("Por favor, preencha o Endereço de Entrega."); return; }
 
+    if (formData.paymentMethod === 'dinheiro' && formData.change > 0 && formData.change <= total) {
+      alert("O valor para troco deve ser maior que o total do pedido.");
+      return;
+    }
+
     setIsSubmitting(true);
     
     if (!user) {
@@ -4172,7 +4266,7 @@ const CheckoutForm = ({ cart, total, onComplete, pixKey, pharmacyId = DEFAULT_PH
           customerPhone: formData.phone,
           paymentMethod: formData.paymentMethod,
           deliveryType: formData.deliveryType,
-          change: formData.change,
+          change: formData.paymentMethod === 'dinheiro' ? formData.change : 0,
           cart: cart.map(item => ({
             productId: item.id,
             quantity: item.quantity
@@ -4257,7 +4351,7 @@ const CheckoutForm = ({ cart, total, onComplete, pixKey, pharmacyId = DEFAULT_PH
           <button 
             key={method}
             type="button"
-            onClick={() => setFormData({ ...formData, paymentMethod: method })}
+            onClick={() => setFormData({ ...formData, paymentMethod: method, change: method === 'dinheiro' ? formData.change : 0 })}
             className={cn(
               "p-4 rounded-xl font-bold border-2 transition-all flex flex-col items-center gap-2",
               formData.paymentMethod === method ? "bg-indigo-600 border-indigo-600 text-white shadow-lg" : "bg-white border-gray-100 text-gray-500 hover:border-indigo-100"
@@ -4282,6 +4376,60 @@ const CheckoutForm = ({ cart, total, onComplete, pixKey, pharmacyId = DEFAULT_PH
             <p className="text-sm text-amber-900/70 font-medium">
               A farmácia vai conferir no sistema interno se este cliente possui convênio ou conta autorizada antes de aprovar o pedido.
             </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {formData.paymentMethod === 'dinheiro' && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 space-y-4"
+          >
+            <div className="flex items-center gap-3 text-emerald-700">
+              <CheckCircle2 size={24} />
+              <h5 className="font-bold">Pagamento em dinheiro</h5>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, change: 0 })}
+                className={cn(
+                  "h-12 rounded-xl border-2 text-sm font-black uppercase tracking-widest transition-all",
+                  !formData.change ? "bg-emerald-600 border-emerald-600 text-white" : "bg-white border-emerald-100 text-emerald-700"
+                )}
+              >
+                Sem Troco
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, change: formData.change || Math.ceil(total / 10) * 10 })}
+                className={cn(
+                  "h-12 rounded-xl border-2 text-sm font-black uppercase tracking-widest transition-all",
+                  formData.change ? "bg-emerald-600 border-emerald-600 text-white" : "bg-white border-emerald-100 text-emerald-700"
+                )}
+              >
+                Precisa Troco
+              </button>
+            </div>
+            {Boolean(formData.change) && (
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-emerald-700 uppercase tracking-widest pl-1">Troco para quanto?</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="w-full bg-white border-2 border-emerald-100 p-4 rounded-2xl font-black text-emerald-700 focus:ring-4 focus:ring-emerald-100 outline-none"
+                  value={formData.change || ''}
+                  onChange={e => setFormData({ ...formData, change: parseFloat(e.target.value) || 0 })}
+                  placeholder="Ex: 100,00"
+                />
+                <p className="text-sm font-bold text-emerald-700">
+                  A farmácia deve levar R$ {money(Math.max(Number(formData.change || 0) - total, 0))} de troco.
+                </p>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

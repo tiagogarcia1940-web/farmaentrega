@@ -162,6 +162,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         itemDescriptions.push(`${cartItem.quantity}x ${product.name || snap.id}`);
       });
 
+      const change = input.paymentMethod === 'dinheiro' ? input.change : 0;
+      if (change > 0 && change <= totalValue) {
+        throw new Error('Valor para troco deve ser maior que o total do pedido.');
+      }
+
       const counterRef = db.doc('counters/orders');
       const counterSnap = await transaction.get(counterRef);
       const nextNumber = (Number(counterSnap.data()?.lastNumber) || 0) + 1;
@@ -178,7 +183,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         items: itemDescriptions.join(', '),
         totalValue: Number(totalValue.toFixed(2)),
         paymentMethod: input.paymentMethod,
-        change: input.change,
+        change,
         status: 'pending',
         pharmacyId: input.pharmacyId,
         deliveryType: input.deliveryType,
