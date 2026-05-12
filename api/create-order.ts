@@ -29,17 +29,7 @@ type CreateOrderInput = {
 };
 
 const getServiceAccount = () => {
-  const envName = [
-    'FIREBASE_SERVICE_ACCOUNT_JSON',
-    'FTREBASE_SERVICE_ACCOUNT_JSON',
-    'FTIREBASE_SERVICE_ACCOUNT_JSON'
-  ].find(name => Boolean(process.env[name])) ||
-    Object.keys(process.env).find(name => {
-      const normalized = name.toUpperCase();
-      return normalized.includes('SERVICE_ACCOUNT') && normalized.includes('JSON');
-    });
-  const raw = envName ? process.env[envName] : undefined;
-
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw) {
     throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is not configured.');
   }

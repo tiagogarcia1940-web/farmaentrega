@@ -14,11 +14,14 @@ service cloud.firestore {
     }
 
     function userPharmacyId() {
-      return userDoc().pharmacyId == null ? 'farmaentrega-matriz' : userDoc().pharmacyId;
+      return request.auth.token.pharmacyId is string
+        ? request.auth.token.pharmacyId
+        : (userDoc().pharmacyId == null ? 'farmaentrega-matriz' : userDoc().pharmacyId);
     }
 
     function samePharmacy(data) {
-      return hasUserDoc() &&
+      return isSignedIn() &&
+             (request.auth.token.pharmacyId is string || hasUserDoc()) &&
              (data.pharmacyId == null ? 'farmaentrega-matriz' : data.pharmacyId) == userPharmacyId();
     }
 
@@ -32,12 +35,16 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         isClaimAdmin() ||
+        request.auth.token.role == 'admin' ||
         (hasUserDoc() && userDoc().role == 'admin')
       );
     }
 
     function hasRole(role) {
-      return hasUserDoc() && userDoc().role == role;
+      return isSignedIn() && (
+        request.auth.token.role == role ||
+        (hasUserDoc() && userDoc().role == role)
+      );
     }
 
     function isStaff() {

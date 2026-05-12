@@ -4587,6 +4587,28 @@ const ClientTrackingDetails = ({ order: initialOrder }: { order: Order }) => {
 const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const syncedClaimsRef = useRef<Set<string>>(new Set());
+
+  const syncAuthClaims = async (firebaseUser: FirebaseUser) => {
+    const idToken = await firebaseUser.getIdToken();
+    const response = await fetch('/api/sync-claims', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${idToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const result = await response.json().catch(() => null);
+      throw new Error(result?.error || 'Nao foi possivel sincronizar permissoes.');
+    }
+
+    const result = await response.json();
+    if (result?.claimsUpdated) {
+      await firebaseUser.getIdToken(true);
+    }
+  };
 
   const completeGoogleSignIn = async (firebaseUser: FirebaseUser, requestedRole?: AppUser['role']) => {
     const isAdminEmail = firebaseUser.email === 'xtiaguinhox65@gmail.com';
@@ -4603,6 +4625,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         pharmacyId: getInitialPharmacyId(firebaseUser.uid, requestedRole, isAdminEmail)
       };
       await setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
+      await syncAuthClaims(firebaseUser);
       storeGoogleLoginRole();
       return;
     }
@@ -4613,6 +4636,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (existingUser.role !== 'admin') {
         await updateDoc(doc(db, 'users', firebaseUser.uid), { role: 'admin' });
       }
+      await syncAuthClaims(firebaseUser);
       storeGoogleLoginRole();
       return;
     }
@@ -4623,6 +4647,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       throw new Error(`Este e-mail já está cadastrado como ${existingUser.role}. Por favor, entre no setor correto.`);
     }
 
+    await syncAuthClaims(firebaseUser);
     storeGoogleLoginRole();
   };
 
@@ -4649,6 +4674,12 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         unsubUser = onSnapshot(doc(db, 'users', firebaseUser.uid), (docSnap) => {
           if (docSnap.exists()) {
             const userData = docSnap.data() as AppUser;
+            if (!syncedClaimsRef.current.has(firebaseUser.uid)) {
+              syncedClaimsRef.current.add(firebaseUser.uid);
+              void syncAuthClaims(firebaseUser).catch(error => {
+                console.error('Erro ao sincronizar permissoes:', error);
+              });
+            }
             // Force admin role if email matches
             if (isAdminEmail && userData.role !== 'admin') {
               const updatedAdmin = { ...userData, role: 'admin' as const };
@@ -4667,7 +4698,15 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               photoURL: firebaseUser.photoURL || '',
               pharmacyId: getInitialPharmacyId(firebaseUser.uid, requestedRole, isAdminEmail)
             };
-            setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
+            const createUserDoc = setDoc(doc(db, 'users', firebaseUser.uid), newUser, { merge: true });
+            if (!syncedClaimsRef.current.has(firebaseUser.uid)) {
+              syncedClaimsRef.current.add(firebaseUser.uid);
+              void createUserDoc
+                .then(() => syncAuthClaims(firebaseUser))
+                .catch(error => {
+                  console.error('Erro ao sincronizar permissoes:', error);
+                });
+            }
             setUser(newUser);
           }
           setLoading(false);
