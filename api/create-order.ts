@@ -29,7 +29,11 @@ const getServiceAccount = () => {
     'FIREBASE_SERVICE_ACCOUNT_JSON',
     'FTREBASE_SERVICE_ACCOUNT_JSON',
     'FTIREBASE_SERVICE_ACCOUNT_JSON'
-  ].find(name => Boolean(process.env[name]));
+  ].find(name => Boolean(process.env[name])) ||
+    Object.keys(process.env).find(name => {
+      const normalized = name.toUpperCase();
+      return normalized.includes('SERVICE_ACCOUNT') && normalized.includes('JSON');
+    });
   const raw = envName ? process.env[envName] : undefined;
 
   if (!raw) {
