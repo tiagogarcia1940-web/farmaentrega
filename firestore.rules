@@ -32,7 +32,6 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         isClaimAdmin() ||
-        request.auth.token.email == "xtiaguinhox65@gmail.com" ||
         (hasUserDoc() && userDoc().role == 'admin')
       );
     }
@@ -66,7 +65,13 @@ service cloud.firestore {
           request.auth.uid == userId &&
           request.resource.data.uid == userId &&
           request.resource.data.email == request.auth.token.email &&
-          request.resource.data.role in ['client', 'pharmacist', 'motoboy'] &&
+          (
+            request.resource.data.role == 'client' ||
+            (
+              request.resource.data.role in ['pharmacist', 'motoboy'] &&
+              request.resource.data.pharmacyId == 'pharmacy_' + request.auth.uid
+            )
+          ) &&
           request.resource.data.diff({}).affectedKeys().hasOnly([
             'uid', 'name', 'email', 'role', 'photoURL', 'phone', 'address',
             'status', 'pharmacyId', 'createdAt', 'updatedAt'

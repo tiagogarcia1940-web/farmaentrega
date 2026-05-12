@@ -7,6 +7,10 @@ const projectId = 'gen-lang-client-0221522158';
 const databaseId = 'ai-studio-4e28232f-7d94-4ae8-9c53-ed186154fdb3';
 const allowedPaymentMethods = new Set(['dinheiro', 'cartao', 'pix', 'convenio']);
 const allowedDeliveryTypes = new Set(['normal', 'urgente', 'controlado']);
+const maxBodyBytes = 32 * 1024;
+const rateLimitWindowMs = 60 * 1000;
+const maxOrdersPerWindow = 8;
+const orderAttempts = new Map<string, { count: number; resetAt: number }>();
 
 type CartInput = {
   productId: string;
@@ -57,8 +61,14 @@ const getAdminApp = () => {
 
 const readBody = async (req: IncomingMessage) => {
   const chunks: Buffer[] = [];
+  let size = 0;
   for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > maxBodyBytes) {
+      throw new Error('Pedido muito grande.');
+    }
+    chunks.push(buffer);
   }
   const raw = Buffer.concat(chunks).toString('utf8');
   return raw ? JSON.parse(raw) : {};
@@ -76,6 +86,22 @@ const normalizeQuantity = (quantity: unknown) => {
     throw new Error('Quantidade invalida no carrinho.');
   }
   return value;
+};
+
+const checkRateLimit = (uid: string) => {
+  const now = Date.now();
+  const current = orderAttempts.get(uid);
+  if (!current || current.resetAt <= now) {
+    orderAttempts.set(uid, { count: 1, resetAt: now + rateLimitWindowMs });
+    return;
+  }
+
+  if (current.count >= maxOrdersPerWindow) {
+    throw new Error('Muitas tentativas de pedido. Aguarde um minuto e tente novamente.');
+  }
+
+  current.count += 1;
+  orderAttempts.set(uid, current);
 };
 
 const validateInput = (body: Partial<CreateOrderInput>): CreateOrderInput => {
@@ -117,6 +143,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const app = getAdminApp();
     const auth = getAuth(app);
     const decodedToken = await auth.verifyIdToken(idToken);
+    checkRateLimit(decodedToken.uid);
     const db = getFirestore(app, databaseId);
     const input = validateInput(await readBody(req));
 
