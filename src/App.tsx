@@ -880,8 +880,7 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={false}
         className="w-full max-w-5xl text-center space-y-12"
       >
         <div className="space-y-4">
@@ -905,12 +904,9 @@ const LandingPage = () => {
               if (['pharmacist', 'logistics'].includes(user.role)) return portal.id === 'farmacia';
               return false;
             })
-            .map((portal, idx) => (
+            .map((portal) => (
               <motion.button
                 key={portal.id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: idx * 0.1 }}
                 onClick={() => navigate(portal.path)}
                 className="group relative bg-white p-8 rounded-[3rem] shadow-xl hover:shadow-2xl transition-all border border-gray-100 flex flex-col items-center text-center space-y-6 overflow-hidden w-full"
               >
