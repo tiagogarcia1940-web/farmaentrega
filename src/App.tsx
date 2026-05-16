@@ -421,8 +421,17 @@ const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
       setHasError(true);
       setError(event.error?.message || 'Ocorreu um erro inesperado.');
     };
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      setHasError(true);
+      const reason = event.reason;
+      setError(reason?.message || String(reason || 'Ocorreu um erro inesperado.'));
+    };
     window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
   }, []);
 
   if (hasError) {
@@ -4828,6 +4837,18 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     let unsubUser: (() => void) | undefined;
+    let authReady = false;
+    const finishLoading = () => {
+      authReady = true;
+      setLoading(false);
+    };
+    const authTimeout = window.setTimeout(() => {
+      if (!authReady) {
+        console.warn('Tempo limite ao carregar autenticacao inicial. Liberando tela inicial.');
+        setUser(null);
+        finishLoading();
+      }
+    }, 10000);
 
     getRedirectResult(auth)
       .then(async (result) => {
@@ -4884,10 +4905,16 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }
             setUser(newUser);
           }
-          setLoading(false);
+          finishLoading();
         }, (error) => {
-          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
-          setLoading(false);
+          console.error('Erro ao carregar usuario autenticado:', error);
+          try {
+            handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+          } catch (handledError) {
+            console.error('Erro tratado ao carregar usuario autenticado:', handledError);
+          }
+          setUser(null);
+          finishLoading();
         });
       } else {
         if (unsubUser) {
@@ -4895,11 +4922,12 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           unsubUser = undefined;
         }
         setUser(null);
-        setLoading(false);
+        finishLoading();
       }
     });
 
     return () => {
+      window.clearTimeout(authTimeout);
       unsubAuth();
       if (unsubUser) unsubUser();
     };
