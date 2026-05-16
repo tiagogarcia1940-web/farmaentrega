@@ -4029,7 +4029,7 @@ const ClientView = ({
               >
                 <div className="space-y-2">
                   <h3 className="text-3xl font-black text-gray-900 tracking-tight italic">Nossas Categorias</h3>
-                  <p className="text-gray-400 font-medium">Navegue por departamento e encontre o que precisa.</p>
+                  <p className="text-gray-400 font-medium">Navegue por categoria e encontre o que precisa.</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {categories.map(cat => (
@@ -5334,7 +5334,7 @@ const Dashboard = ({ portal }: { portal: 'cliente' | 'farmacia' | 'motoboy' }) =
     if (activeRole === 'client') {
       return [
         { id: 'shop', label: 'Início da Loja', icon: Home },
-        { id: 'categories', label: 'Departamentos', icon: LayoutDashboard },
+        { id: 'categories', label: 'Categorias', icon: LayoutDashboard },
         { id: 'cart', label: 'Meu Carrinho', icon: ShoppingCart },
         { id: 'favorites', label: 'Favoritos', icon: Heart },
         { id: 'orders', label: 'Meus Pedidos', icon: History },
