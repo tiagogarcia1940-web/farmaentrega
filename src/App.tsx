@@ -220,6 +220,33 @@ const getChangeLabel = (order: Pick<Order, 'paymentMethod' | 'change' | 'totalVa
   return `Troco para R$ ${money(changeFor)} • Levar R$ ${money(changeDue)}`;
 };
 
+const resizeImageToDataUrl = (file: File, maxWidth = 1400, maxHeight = 700, quality = 0.78): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Nao foi possivel ler a imagem.'));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error('Nao foi possivel carregar a imagem.'));
+      image.onload = () => {
+        const scale = Math.min(maxWidth / image.width, maxHeight / image.height, 1);
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+        if (!context) {
+          reject(new Error('Nao foi possivel processar a imagem.'));
+          return;
+        }
+        context.drawImage(image, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      image.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+  });
+
 interface Order {
   id: string;
   orderCode: string;
@@ -5898,7 +5925,10 @@ const CatalogView = () => {
       alert('Configurações da loja atualizadas com sucesso!');
     } catch (error) {
       console.error(error);
-      alert('Erro ao salvar configurações.');
+      const message = error instanceof Error ? error.message : '';
+      alert(message.includes('maximum size') || message.includes('larger than')
+        ? 'Erro ao salvar configurações: o banner ainda está pesado demais. Tente uma imagem menor.'
+        : 'Erro ao salvar configurações.');
     }
   };
 
@@ -6196,18 +6226,24 @@ const CatalogView = () => {
                         type="file" 
                         accept="image/*" 
                         className="hidden" 
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            if (file.size > 2 * 1024 * 1024) {
-                              alert("O banner é muito pesado! Use uma imagem de até 2MB.");
+                            if (file.size > 6 * 1024 * 1024) {
+                              alert("O banner é muito pesado! Use uma imagem de até 6MB.");
                               return;
                             }
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setStoreConfig({...storeConfig, heroImage: reader.result as string});
-                            };
-                            reader.readAsDataURL(file);
+                            try {
+                              const heroImage = await resizeImageToDataUrl(file);
+                              if (heroImage.length > 850000) {
+                                alert("Nao foi possivel reduzir essa imagem o suficiente. Tente uma imagem menor ou mais simples.");
+                                return;
+                              }
+                              setStoreConfig({...storeConfig, heroImage});
+                            } catch (error) {
+                              console.error(error);
+                              alert("Nao foi possivel processar o banner.");
+                            }
                           }
                         }} 
                       />
