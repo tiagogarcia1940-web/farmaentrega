@@ -377,6 +377,7 @@ interface Product {
   tags?: string[];
   requiresApproval?: boolean;
   stock?: number;
+  barcode?: string;
   pharmacyId?: string;
 }
 
@@ -6029,6 +6030,7 @@ const CatalogView = () => {
       category: product.category,
       price: product.price,
       stock: product.stock || 0,
+      barcode: product.barcode || '',
       description: product.description,
       specifications: product.specifications || '',
       howToUse: product.howToUse || '',
@@ -6045,6 +6047,7 @@ const CatalogView = () => {
         category: 'Medicamentos',
         price: 5.5,
         stock: 50,
+        barcode: '1234567890123',
         description: 'Analgesico e antitermico',
         specifications: '',
         howToUse: '',
@@ -6064,6 +6067,9 @@ const CatalogView = () => {
     if (!file || !user) return;
 
     try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Sessao invalida. Entre novamente.');
+
       const text = await file.text();
       const result = Papa.parse<Record<string, string>>(text, {
         header: true,
@@ -6077,50 +6083,53 @@ const CatalogView = () => {
       }
 
       const pharmacyId = getPharmacyId(user);
-      let imported = 0;
-      let updated = 0;
-
-      for (const row of result.data) {
+      const productsToSync = result.data.map(row => {
         const name = row.name?.trim();
         const price = Number(String(row.price || '').replace(',', '.'));
-        if (!name || !price || Number.isNaN(price)) continue;
+        if (!name || !price || Number.isNaN(price)) return null;
 
-        const dataToSave = {
+        return {
           name,
           category: row.category?.trim() || 'Medicamentos',
           price,
+          originalPrice: row.originalPrice ? Number(String(row.originalPrice).replace(',', '.')) : null,
           stock: Number(row.stock || row.quantity || 0) || 0,
           description: row.description?.trim() || name,
           specifications: row.specifications?.trim() || '',
           howToUse: row.howToUse?.trim() || '',
           tags: row.tags ? row.tags.split('|').map(tag => tag.trim()).filter(Boolean) : [],
-          image: row.image?.trim() || storeConfig.heroImage,
-          pharmacyId,
-          updatedAt: serverTimestamp()
+          barcode: row.barcode?.trim() || '',
+          image: row.image?.trim() || storeConfig.heroImage
         };
+      }).filter(Boolean);
 
-        const existing = await getDocs(query(
-          collection(db, 'products'),
-          where('pharmacyId', '==', pharmacyId),
-          where('name', '==', name)
-        ));
-
-        if (existing.empty) {
-          await addDoc(collection(db, 'products'), {
-            ...dataToSave,
-            createdAt: serverTimestamp()
-          });
-          imported++;
-        } else {
-          await updateDoc(doc(db, 'products', existing.docs[0].id), dataToSave);
-          updated++;
-        }
+      if (productsToSync.length === 0) {
+        alert('Nenhum produto valido encontrado no CSV.');
+        return;
       }
 
-      alert(`${imported} produtos importados e ${updated} produtos atualizados.`);
+      const response = await fetch('/api/sync-stock', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ pharmacyId, products: productsToSync })
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Nao foi possivel sincronizar estoque.');
+      }
+
+      const report = payload.report || { added: 0, updated: 0, unchanged: 0, errors: [] };
+      alert(
+        `${report.added} produtos adicionados, ${report.updated} atualizados e ${report.unchanged} sem mudanca.`
+        + (report.errors?.length ? `\nErros: ${report.errors.length}` : '')
+      );
     } catch (error) {
       console.error(error);
-      alert('Erro ao importar estoque.');
+      alert(error instanceof Error ? error.message : 'Erro ao importar estoque.');
     } finally {
       if (importInputRef.current) importInputRef.current.value = '';
     }
