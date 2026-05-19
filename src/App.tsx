@@ -263,6 +263,9 @@ interface Order {
   items: string;
   change?: number;
   paymentMethod?: PaymentMethod;
+  paymentConfirmed?: boolean;
+  paymentConfirmedAt?: Timestamp;
+  paymentConfirmedBy?: string;
   totalValue?: number;
   status: OrderStatus;
   deliveryType?: DeliveryType;
@@ -622,6 +625,22 @@ const StatusBadge = ({ status }: { status: OrderStatus }) => {
   return (
     <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border whitespace-nowrap inline-flex items-center justify-center", styles[status])}>
       {labels[status]}
+    </span>
+  );
+};
+
+const PaymentConfirmationBadge = ({ order }: { order: Order }) => {
+  if (order.paymentMethod !== 'pix') return null;
+
+  return (
+    <span className={cn(
+      "mt-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider",
+      order.paymentConfirmed
+        ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+        : "bg-amber-50 text-amber-700 border-amber-100"
+    )}>
+      {order.paymentConfirmed ? <CheckCircle2 size={10} /> : <Clock size={10} />}
+      {order.paymentConfirmed ? 'PIX confirmado' : 'PIX pendente'}
     </span>
   );
 };
@@ -1254,6 +1273,7 @@ const PharmacistView = () => {
         ...newOrder,
         totalValue,
         change,
+        paymentConfirmed: newOrder.paymentMethod !== 'pix',
         orderCode,
         status: 'pending',
         pharmacistId: user?.uid,
@@ -1298,6 +1318,11 @@ const PharmacistView = () => {
     try {
       const orderDoc = await getDoc(doc(db, 'orders', id));
       const orderData = orderDoc.data() as Order;
+
+      if (newStatus === 'approved' && orderData.paymentMethod === 'pix' && !orderData.paymentConfirmed) {
+        alert('Confirme o recebimento do PIX antes de aprovar o pedido.');
+        return;
+      }
       
       const updateData: any = {
         status: newStatus,
@@ -1318,6 +1343,26 @@ const PharmacistView = () => {
   };
 
   const approveOrder = (id: string) => updateStatus(id, 'approved');
+
+  const confirmPixPayment = async (order: Order) => {
+    if (order.paymentMethod !== 'pix') return;
+    if (order.paymentConfirmed) return;
+
+    const confirmed = window.confirm(`Confirmar que o PIX do pedido #${order.orderCode} foi recebido?`);
+    if (!confirmed) return;
+
+    const path = `orders/${order.id}`;
+    try {
+      await updateDoc(doc(db, 'orders', order.id), {
+        paymentConfirmed: true,
+        paymentConfirmedAt: serverTimestamp(),
+        paymentConfirmedBy: user?.uid || null,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  };
 
   const deleteOrder = async (id: string) => {
     if (!window.confirm('Tem certeza que deseja excluir este pedido?')) return;
@@ -1781,9 +1826,12 @@ const PharmacistView = () => {
                   )}
                 </td>
                 <td className="px-6 py-4">
-                  <span className="text-xs font-medium bg-gray-100 px-2 py-1 rounded capitalize">
-                    {order.paymentMethod ? paymentMethodLabels[order.paymentMethod] : 'N/A'}
-                  </span>
+                  <div className="flex flex-col items-start">
+                    <span className="text-xs font-medium bg-gray-100 px-2 py-1 rounded capitalize">
+                      {order.paymentMethod ? paymentMethodLabels[order.paymentMethod] : 'N/A'}
+                    </span>
+                    <PaymentConfirmationBadge order={order} />
+                  </div>
                 </td>
                 <td className="px-6 py-4">
                   <StatusBadge status={order.status} />
@@ -1856,12 +1904,29 @@ const PharmacistView = () => {
                     <MessageSquare size={18} />
                   </a>
                   {order.status === 'pending' && (
-                    <button 
-                      onClick={() => approveOrder(order.id)}
-                      className="bg-indigo-600 text-white px-3 py-1 rounded-full font-bold text-xs hover:bg-indigo-700 transition-all shadow-sm"
-                    >
-                      Aprovar
-                    </button>
+                    <>
+                      {order.paymentMethod === 'pix' && !order.paymentConfirmed && (
+                        <button
+                          onClick={() => confirmPixPayment(order)}
+                          className="bg-emerald-600 text-white px-3 py-1 rounded-full font-bold text-xs hover:bg-emerald-700 transition-all shadow-sm whitespace-nowrap"
+                        >
+                          Confirmar PIX
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => approveOrder(order.id)}
+                        className={cn(
+                          "px-3 py-1 rounded-full font-bold text-xs transition-all shadow-sm",
+                          order.paymentMethod === 'pix' && !order.paymentConfirmed
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : "bg-indigo-600 text-white hover:bg-indigo-700"
+                        )}
+                        disabled={order.paymentMethod === 'pix' && !order.paymentConfirmed}
+                        title={order.paymentMethod === 'pix' && !order.paymentConfirmed ? 'Confirme o PIX antes de aprovar' : 'Aprovar pedido'}
+                      >
+                        Aprovar
+                      </button>
+                    </>
                   )}
                   {order.status === 'approved' && (
                     <button 
@@ -2413,9 +2478,12 @@ const LogisticsView = () => {
                         )}
                       </td>
                       <td className="px-5 py-4 text-center">
-                        <span className="inline-flex min-w-[74px] justify-center whitespace-nowrap text-xs font-black uppercase bg-gray-100 text-gray-600 px-2 py-1 rounded-md border border-gray-200">
-                          {order.paymentMethod ? paymentMethodShortLabels[order.paymentMethod] : 'N/D'}
-                        </span>
+                        <div className="flex flex-col items-center">
+                          <span className="inline-flex min-w-[74px] justify-center whitespace-nowrap text-xs font-black uppercase bg-gray-100 text-gray-600 px-2 py-1 rounded-md border border-gray-200">
+                            {order.paymentMethod ? paymentMethodShortLabels[order.paymentMethod] : 'N/D'}
+                          </span>
+                          <PaymentConfirmationBadge order={order} />
+                        </div>
                       </td>
                       <td className="px-5 py-4 text-center">
                         <StatusBadge status={order.status} />

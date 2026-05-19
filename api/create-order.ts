@@ -183,6 +183,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         items: itemDescriptions.join(', '),
         totalValue: Number(totalValue.toFixed(2)),
         paymentMethod: input.paymentMethod,
+        paymentConfirmed: input.paymentMethod !== 'pix',
         change,
         status: 'pending',
         pharmacyId: input.pharmacyId,

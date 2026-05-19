@@ -142,7 +142,7 @@ service cloud.firestore {
         request.resource.data.diff({}).affectedKeys().hasOnly([
           'orderCode', 'customerName', 'customerAddress', 'customerPhone',
           'customerId', 'items', 'totalValue', 'paymentMethod', 'change',
-          'status', 'pharmacyId', 'deliveryType', 'createdAt', 'updatedAt'
+          'paymentConfirmed', 'status', 'pharmacyId', 'deliveryType', 'createdAt', 'updatedAt'
         ]) &&
         (
           isAdmin() ||
@@ -158,6 +158,7 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'status', 'motoboyId', 'motoboyName', 'items', 'totalValue', 'change',
             'customerName', 'customerAddress', 'customerPhone', 'deliveryType', 'paymentMethod',
+            'paymentConfirmed', 'paymentConfirmedAt', 'paymentConfirmedBy',
             'approvedAt', 'readyAt', 'updatedAt', 'cancellationReason'
           ])
         ) ||
