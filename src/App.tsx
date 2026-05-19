@@ -3840,9 +3840,12 @@ const ClientView = ({
                           <motion.button 
                             whileTap={{ scale: 0.95 }}
                             onClick={() => addToCart(selectedProduct)}
-                            className="flex-1 bg-indigo-600 text-white h-16 rounded-[2rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"
+                            className="group/btn relative flex-1 overflow-hidden bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 text-white h-16 rounded-[2rem] font-black uppercase tracking-wide text-xs shadow-[0_18px_45px_rgba(99,102,241,0.35)] hover:shadow-[0_20px_55px_rgba(124,58,237,0.45)] transition-all flex items-center justify-center gap-3"
                           >
-                            <ShoppingCart size={20} /> Adicionar ao Carrinho
+                            <span className="absolute inset-0 bg-white/0 group-hover/btn:bg-white/10 transition-colors" />
+                            <span className="absolute -left-16 top-0 h-full w-12 rotate-12 bg-white/30 blur-sm transition-transform duration-700 group-hover/btn:translate-x-96" />
+                            <ShoppingCart size={20} className="relative z-10" />
+                            <span className="relative z-10">Adicionar ao carrinho</span>
                           </motion.button>
                         )}
                         <motion.button 
@@ -4219,23 +4222,26 @@ const ProductCard = ({ product, onAdd, onUpdateQuantity, onView, cartItems = [],
             </motion.button>
           )}
 
-          <motion.button 
-            whileTap={{ scale: 0.85 }}
+          <motion.button
+            whileTap={{ scale: 0.94 }}
             onClick={() => onAdd(product)}
             className={cn(
-              "p-4 rounded-2xl transition-all shadow-lg group/btn relative overflow-hidden",
-              quantity > 0 ? "bg-emerald-500 hover:bg-emerald-600" : "bg-indigo-600 hover:bg-indigo-700"
+              "h-14 min-w-[124px] px-5 rounded-2xl transition-all group/btn relative overflow-hidden flex items-center justify-center gap-2 text-white",
+              quantity > 0
+                ? "bg-gradient-to-r from-emerald-500 to-teal-500 shadow-[0_14px_30px_rgba(16,185,129,0.28)] hover:shadow-[0_16px_38px_rgba(16,185,129,0.38)]"
+                : "bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 shadow-[0_14px_30px_rgba(99,102,241,0.32)] hover:shadow-[0_16px_42px_rgba(124,58,237,0.42)]"
             )}
           >
-            <div className="relative z-10">
-              {quantity > 0 ? (
-                <div className="flex items-center gap-1 group-hover/btn:scale-110 transition-transform">
-                  <Plus size={20} className="font-bold" />
-                </div>
-              ) : (
-                <Plus size={20} className="group-hover/btn:rotate-90 transition-all" />
-              )}
-            </div>
+            <span className="absolute inset-0 bg-white/0 group-hover/btn:bg-white/10 transition-colors" />
+            <span className="absolute -left-12 top-0 h-full w-10 rotate-12 bg-white/30 blur-sm transition-transform duration-700 group-hover/btn:translate-x-48" />
+            {quantity > 0 ? (
+              <Plus size={18} className="relative z-10" />
+            ) : (
+              <ShoppingCart size={18} className="relative z-10" />
+            )}
+            <span className="relative z-10 text-[11px] font-black uppercase tracking-wide whitespace-nowrap">
+              {quantity > 0 ? 'Adicionar mais' : 'Comprar'}
+            </span>
           </motion.button>
         </div>
       </div>
