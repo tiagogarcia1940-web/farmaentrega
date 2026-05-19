@@ -200,6 +200,13 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
   convenio: 'Convenio / deixar na conta'
 };
 
+const paymentMethodShortLabels: Record<PaymentMethod, string> = {
+  dinheiro: 'Dinheiro',
+  cartao: 'Cartao',
+  pix: 'PIX',
+  convenio: 'Convenio'
+};
+
 const paymentMethods: PaymentMethod[] = ['pix', 'cartao', 'dinheiro', 'convenio'];
 
 const money = (value?: number) =>
@@ -2406,8 +2413,8 @@ const LogisticsView = () => {
                         )}
                       </td>
                       <td className="px-5 py-4 text-center">
-                        <span className="text-xs font-black uppercase bg-gray-100 text-gray-600 px-2 py-1 rounded-md border border-gray-200">
-                          {order.paymentMethod ? paymentMethodLabels[order.paymentMethod] : 'N/D'}
+                        <span className="inline-flex min-w-[74px] justify-center whitespace-nowrap text-xs font-black uppercase bg-gray-100 text-gray-600 px-2 py-1 rounded-md border border-gray-200">
+                          {order.paymentMethod ? paymentMethodShortLabels[order.paymentMethod] : 'N/D'}
                         </span>
                       </td>
                       <td className="px-5 py-4 text-center">
@@ -3086,7 +3093,9 @@ const MotoboyView = () => {
                     <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Pagamento</p>
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-indigo-600 uppercase">{order.paymentMethod ? paymentMethodLabels[order.paymentMethod] : 'N/D'}</span>
+                        <span className="inline-flex w-fit max-w-full rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-600 uppercase leading-tight">
+                          {order.paymentMethod ? paymentMethodShortLabels[order.paymentMethod] : 'N/D'}
+                        </span>
                         {order.totalValue && (
                           <p className="text-sm font-bold text-gray-900">
                             R$ {order.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -4386,11 +4395,13 @@ const CheckoutForm = ({ cart, total, onComplete, pixKey, pharmacyId = DEFAULT_PH
             type="button"
             onClick={() => setFormData({ ...formData, paymentMethod: method, change: method === 'dinheiro' ? formData.change : 0 })}
             className={cn(
-              "p-4 rounded-xl font-bold border-2 transition-all flex flex-col items-center gap-2",
+              "p-4 min-h-[54px] rounded-xl font-bold border-2 transition-all flex items-center justify-center text-center",
               formData.paymentMethod === method ? "bg-indigo-600 border-indigo-600 text-white shadow-lg" : "bg-white border-gray-100 text-gray-500 hover:border-indigo-100"
             )}
           >
-            <span className="uppercase text-[10px] tracking-widest">{paymentMethodLabels[method]}</span>
+            <span className="uppercase text-[10px] tracking-wide leading-tight whitespace-nowrap">
+              {paymentMethodShortLabels[method]}
+            </span>
           </button>
         ))}
       </div>
