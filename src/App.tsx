@@ -5031,10 +5031,15 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const updateUserProfile = async (data: { name?: string, photoURL?: string }) => {
     if (!auth.currentUser) return;
-    await updateProfile(auth.currentUser, {
-      displayName: data.name || auth.currentUser.displayName,
-      photoURL: data.photoURL || auth.currentUser.photoURL
-    });
+    const authProfile: { displayName?: string | null; photoURL?: string | null } = {
+      displayName: data.name || auth.currentUser.displayName
+    };
+
+    if (data.photoURL && !data.photoURL.startsWith('data:')) {
+      authProfile.photoURL = data.photoURL;
+    }
+
+    await updateProfile(auth.currentUser, authProfile);
     await updateDoc(doc(db, 'users', auth.currentUser.uid), data);
   };
 
@@ -5068,15 +5073,7 @@ const SettingsView = () => {
   const [newPass, setNewPass] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-
-  const avatars = [
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka',
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=Max',
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=Luna',
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=Oliver',
-    'https://api.dicebear.com/7.x/avataaars/svg?seed=Maya',
-  ];
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -5088,6 +5085,36 @@ const SettingsView = () => {
       setMessage({ type: 'error', text: err.message });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePhotoFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile) return;
+
+    if (!selectedFile.type.startsWith('image/')) {
+      setMessage({ type: 'error', text: 'Selecione um arquivo de imagem.' });
+      return;
+    }
+
+    if (selectedFile.size > 8 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'A foto e muito pesada. Escolha uma imagem de ate 8MB.' });
+      return;
+    }
+
+    try {
+      const compressedPhoto = await resizeImageToDataUrl(selectedFile, 512, 512, 0.82);
+      if (compressedPhoto.length > 200 * 1024) {
+        setMessage({ type: 'error', text: 'Nao foi possivel reduzir essa foto. Tente uma imagem menor.' });
+        return;
+      }
+      setPhotoURL(compressedPhoto);
+      setMessage(null);
+    } catch (error) {
+      console.error(error);
+      setMessage({ type: 'error', text: 'Nao foi possivel processar essa foto.' });
+    } finally {
+      if (photoInputRef.current) photoInputRef.current.value = '';
     }
   };
 
@@ -5149,23 +5176,28 @@ const SettingsView = () => {
           <form onSubmit={handleUpdateProfile} className="space-y-6">
             <div className="flex flex-col items-center gap-4">
               <div className="w-24 h-24 rounded-full bg-gray-100 overflow-hidden border-4 border-white shadow-lg">
-                <img src={photoURL || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'} alt="" referrerPolicy="no-referrer" />
+                <img
+                  src={photoURL || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                />
               </div>
-              <div className="flex flex-wrap justify-center gap-2">
-                {avatars.map((url) => (
-                  <button
-                    key={url}
-                    type="button"
-                    onClick={() => setPhotoURL(url)}
-                    className={cn(
-                      "w-10 h-10 rounded-full overflow-hidden border-2 transition-all",
-                      photoURL === url ? "border-indigo-600 scale-110" : "border-transparent hover:scale-105"
-                    )}
-                  >
-                    <img src={url} alt="" />
-                  </button>
-                ))}
-              </div>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoFileChange}
+              />
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={loading}
+                className="px-5 py-3 rounded-2xl bg-gray-50 border border-gray-100 text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                <Upload size={18} /> Escolher foto do aparelho
+              </button>
             </div>
 
             <div className="space-y-4">
@@ -5177,16 +5209,6 @@ const SettingsView = () => {
                   value={name}
                   onChange={e => setName(e.target.value)}
                   required
-                />
-              </div>
-              <div>
-                <label className="text-sm font-bold text-gray-700 ml-1">URL da Foto (Opcional)</label>
-                <input 
-                  type="text" 
-                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl mt-1 focus:ring-2 focus:ring-indigo-500 outline-none"
-                  value={photoURL}
-                  onChange={e => setPhotoURL(e.target.value)}
-                  placeholder="https://exemplo.com/foto.jpg"
                 />
               </div>
             </div>
